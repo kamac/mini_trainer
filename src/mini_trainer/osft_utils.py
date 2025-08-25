@@ -381,6 +381,17 @@ MODEL_CONFIGS = {
             "mlp.up_proj",
         ]
     },
+    "mistral": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.up_proj",
+            "mlp.down_proj",
+        ]
+    },
     "gpt-j": {
         "patterns": [
             "attn.q_proj",
@@ -464,7 +475,8 @@ MODEL_NAME_MAPPINGS = {
     "opt": "opt",
     "qwen": "qwen",
     "gemma": "gemma",
-    "phi-4-mini-instruct": "phi-4-mini-instruct"
+    "phi-4-mini-instruct": "phi-4-mini-instruct",
+    "mistral": "mistral"
     # Easy to add more mappings
     # "mistral": "mistral",
     # "phi": "phi", 
