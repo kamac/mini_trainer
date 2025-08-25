@@ -54,6 +54,7 @@ test = [
 dev = [
     "ruff",
     "ipython", 
+    "ipykernel",
     "ipdb",
 ]
 

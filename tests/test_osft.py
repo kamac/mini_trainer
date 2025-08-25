@@ -266,12 +266,22 @@ class TestOSFTConfigGeneration:
     def test_get_model_patterns_from_name(self):
         """Test pattern detection from model names."""
         # Test known model types
+        # We need to make sure that these models are tested:
+        # - Llama
+        # - Qwen
+        # - Mistral
+        # - Phi-4
         assert _get_model_patterns_from_name("llama") == MODEL_CONFIGS["llama"]["patterns"]
         assert _get_model_patterns_from_name("gpt-j-6b") == MODEL_CONFIGS["gpt-j"]["patterns"]
         assert _get_model_patterns_from_name("gptj") == MODEL_CONFIGS["gpt-j"]["patterns"]
         assert _get_model_patterns_from_name("opt-350m") == MODEL_CONFIGS["opt"]["patterns"]
         assert _get_model_patterns_from_name("qwen2-7b") == MODEL_CONFIGS["qwen"]["patterns"]
         assert _get_model_patterns_from_name("gemma-2b") == MODEL_CONFIGS["gemma"]["patterns"]
+        assert _get_model_patterns_from_name("mistral") == MODEL_CONFIGS["mistral"]["patterns"]
+        assert _get_model_patterns_from_name("mistral-7b") == MODEL_CONFIGS["mistral"]["patterns"]
+        assert _get_model_patterns_from_name("microsoft/Phi-4") == MODEL_CONFIGS["phi3"]["patterns"]
+        assert _get_model_patterns_from_name("microsoft/Phi-3") == MODEL_CONFIGS["phi3"]["patterns"]
+        assert _get_model_patterns_from_name("microsoft/Phi-4-mini-instruct") == MODEL_CONFIGS["phi3"]["patterns"]
         
         # Test default fallback
         assert _get_model_patterns_from_name("unknown-model") == MODEL_CONFIGS["default"]["patterns"]
@@ -400,6 +410,306 @@ class TestOSFTConfigGeneration:
         # 1D param (should be False regardless)
         param_1d = torch.zeros(100)
         assert is_osft_param("layer1.weight", param_1d, osft_config) is False
+    
+    def _create_tiny_llama_model(self):
+        """Create a tiny Llama model for testing."""
+        try:
+            from transformers import LlamaConfig, LlamaForCausalLM
+        except ImportError:
+            pytest.skip("LlamaForCausalLM not available in this transformers version")
+            
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+            rope_theta=10000.0,
+        )
+        model = LlamaForCausalLM(config)
+        return model, config, "llama"
+    
+    def _create_tiny_mistral_model(self):
+        """Create a tiny Mistral model for testing."""
+        try:
+            from transformers import MistralConfig, MistralForCausalLM
+        except ImportError:
+            pytest.skip("MistralForCausalLM not available in this transformers version")
+            
+        config = MistralConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+            sliding_window=8,
+        )
+        model = MistralForCausalLM(config)
+        return model, config, "mistral"
+    
+    def _create_tiny_qwen2_model(self):
+        """Create a tiny Qwen2 model for testing."""
+        try:
+            from transformers import Qwen2Config, Qwen2ForCausalLM
+        except ImportError:
+            pytest.skip("Qwen2ForCausalLM not available in this transformers version")
+            
+        config = Qwen2Config(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+        )
+        model = Qwen2ForCausalLM(config)
+        return model, config, "qwen"
+    
+    def _create_tiny_phi4_model(self):
+        """Create a tiny Phi-4 model for testing."""
+        try:
+            from transformers import Phi3Config, Phi3ForCausalLM
+        except ImportError:
+            pytest.skip("Phi3ForCausalLM not available in this transformers version")
+            
+        config = Phi3Config(
+            vocab_size=1000,  # Large enough for pad_token_id
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+            pad_token_id=999,  # Set within vocab_size
+            eos_token_id=998,
+            bos_token_id=997
+        )
+        model = Phi3ForCausalLM(config)
+        return model, config, "phi3"
+    
+    def _create_tiny_gptj_model(self):
+        """Create a tiny GPT-J model for testing."""
+        try:
+            from transformers import GPTJConfig, GPTJForCausalLM
+        except ImportError:
+            pytest.skip("GPTJForCausalLM not available in this transformers version")
+            
+        config = GPTJConfig(
+            vocab_size=100,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            rotary_dim=8,  # Required for GPT-J
+            max_position_embeddings=16
+        )
+        model = GPTJForCausalLM(config)
+        return model, config, "gpt-j"
+    
+    def _create_tiny_gptneo_model(self):
+        """Create a tiny GPT-NEO model for testing."""
+        try:
+            from transformers import GPTNeoConfig, GPTNeoForCausalLM
+        except ImportError:
+            pytest.skip("GPTNeoForCausalLM not available in this transformers version")
+            
+        config = GPTNeoConfig(
+            vocab_size=100,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            max_position_embeddings=16,
+            attention_types=[['global', 2], ['global', 2]],  # Required format
+            attention_layers=['global', 'global']
+        )
+        model = GPTNeoForCausalLM(config)
+        return model, config, "gpt-neo"
+    
+    def _create_tiny_opt_model(self):
+        """Create a tiny OPT model for testing."""
+        try:
+            from transformers import OPTConfig, OPTForCausalLM
+        except ImportError:
+            pytest.skip("OPTForCausalLM not available in this transformers version")
+            
+        config = OPTConfig(
+            vocab_size=100,
+            hidden_size=16,
+            ffn_dim=32,  # OPT uses ffn_dim instead of intermediate_size
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            max_position_embeddings=16
+        )
+        model = OPTForCausalLM(config)
+        return model, config, "opt"
+    
+    def _create_tiny_gemma_model(self):
+        """Create a tiny GEMMA model for testing."""
+        try:
+            from transformers import GemmaConfig, GemmaForCausalLM
+        except ImportError:
+            pytest.skip("GemmaForCausalLM not available in this transformers version")
+            
+        config = GemmaConfig(
+            vocab_size=100,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+            pad_token_id=0
+        )
+        model = GemmaForCausalLM(config)
+        return model, config, "gemma"
+    
+    def _create_tiny_granite_model(self):
+        """Create a tiny GRANITE model for testing."""
+        try:
+            from transformers import GraniteConfig, GraniteForCausalLM
+        except ImportError:
+            pytest.skip("GraniteForCausalLM not available in this transformers version")
+            
+        config = GraniteConfig(
+            vocab_size=100,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=16,
+            pad_token_id=0
+        )
+        model = GraniteForCausalLM(config)
+        return model, config, "granite"
+    
+    def _get_model_layer_patterns(self, model_type, config, layer_idx):
+        """Get expected layer patterns for different model types."""
+        if model_type in ["llama", "mistral", "qwen", "gemma", "granite"]:
+            # These models use the same layer structure: model.layers.{idx}
+            layer_prefix = f"model.layers.{layer_idx}"
+            return [
+                f"{layer_prefix}.self_attn.q_proj.weight",
+                f"{layer_prefix}.self_attn.k_proj.weight", 
+                f"{layer_prefix}.self_attn.v_proj.weight",
+                f"{layer_prefix}.self_attn.o_proj.weight",
+                f"{layer_prefix}.mlp.gate_proj.weight",
+                f"{layer_prefix}.mlp.up_proj.weight",
+                f"{layer_prefix}.mlp.down_proj.weight",
+            ]
+        elif model_type == "phi3":
+            # Phi-3/Phi-4 models use combined projections: model.layers.{idx}
+            layer_prefix = f"model.layers.{layer_idx}"
+            return [
+                f"{layer_prefix}.self_attn.qkv_proj.weight",   # Combined q/k/v projection
+                f"{layer_prefix}.self_attn.o_proj.weight",     # Output projection
+                f"{layer_prefix}.mlp.gate_up_proj.weight",     # Combined gate/up projection
+                f"{layer_prefix}.mlp.down_proj.weight",        # Down projection
+            ]
+        elif model_type == "gpt-j":
+            # GPT-J uses h.{idx} instead of layers.{idx}
+            layer_prefix = f"transformer.h.{layer_idx}"
+            return [
+                f"{layer_prefix}.attn.q_proj.weight",
+                f"{layer_prefix}.attn.k_proj.weight",
+                f"{layer_prefix}.attn.v_proj.weight",
+                f"{layer_prefix}.attn.out_proj.weight",
+                f"{layer_prefix}.mlp.fc_in.weight",
+                f"{layer_prefix}.mlp.fc_out.weight",
+            ]
+        elif model_type == "gpt-neo":
+            # GPT-NEO uses h.{idx} with nested attention structure
+            layer_prefix = f"transformer.h.{layer_idx}"
+            return [
+                f"{layer_prefix}.attn.attention.q_proj.weight",
+                f"{layer_prefix}.attn.attention.k_proj.weight",
+                f"{layer_prefix}.attn.attention.v_proj.weight",
+                f"{layer_prefix}.attn.attention.out_proj.weight",
+                f"{layer_prefix}.mlp.c_fc.weight",
+                f"{layer_prefix}.mlp.c_proj.weight",
+            ]
+        elif model_type == "opt":
+            # OPT uses decoder.layers.{idx}
+            layer_prefix = f"model.decoder.layers.{layer_idx}"
+            return [
+                f"{layer_prefix}.self_attn.q_proj.weight",
+                f"{layer_prefix}.self_attn.k_proj.weight",
+                f"{layer_prefix}.self_attn.v_proj.weight",
+                f"{layer_prefix}.self_attn.out_proj.weight",
+                f"{layer_prefix}.fc1.weight",
+                f"{layer_prefix}.fc2.weight",
+            ]
+        else:
+            # For future model types, we can add specific handling
+            raise NotImplementedError(f"Layer patterns not implemented for {model_type}")
+    
+    @pytest.mark.parametrize("model_creator", [
+        "_create_tiny_llama_model",
+        "_create_tiny_mistral_model", 
+        "_create_tiny_qwen2_model",
+        "_create_tiny_phi4_model",
+        "_create_tiny_gptj_model",
+        "_create_tiny_gptneo_model",
+        "_create_tiny_opt_model",
+        "_create_tiny_gemma_model",
+        "_create_tiny_granite_model",
+    ])
+    def test_model_state_dict_pattern_matching(self, model_creator):
+        """Test that model state dicts correctly match expected OSFT patterns."""
+        # Get the model creator method and create the model
+        creator_method = getattr(self, model_creator)
+        model, config, model_type = creator_method()
+        
+        # Get the OSFT config using the model
+        osft_config = auto_generate_target_osft_config(
+            model,
+            model_name_or_class=model_type,
+            rank_ratio=0.5
+        )
+        
+        # Expected patterns from MODEL_CONFIGS
+        expected_patterns = MODEL_CONFIGS[model_type]["patterns"]
+        
+        # Verify that all expected patterns are found in the model's state dict
+        model_param_names = [name for name, _ in model.named_parameters()]
+        
+        # Check that each expected pattern matches at least one parameter
+        for pattern in expected_patterns:
+            matching_params = [name for name in osft_config.keys() if pattern in name]
+            assert len(matching_params) > 0, f"Pattern '{pattern}' not found in OSFT config for {model_type}"
+            
+            # Also verify these parameters exist in the actual model
+            model_matches = [name for name in model_param_names if pattern in name and ".weight" in name]
+            assert len(model_matches) > 0, f"Pattern '{pattern}' not found in model parameters for {model_type}"
+        
+        # Verify that the OSFT config only contains parameters matching our patterns
+        for param_name in osft_config.keys():
+            assert any(pattern in param_name for pattern in expected_patterns), \
+                f"Parameter '{param_name}' doesn't match any expected pattern for {model_type}"
+        
+        # Verify correct number of layers are matched (2 layers as configured)
+        for i in range(config.num_hidden_layers):
+            expected_layer_params = self._get_model_layer_patterns(model_type, config, i)
+            for expected_param in expected_layer_params:
+                assert expected_param in osft_config, \
+                    f"Expected parameter '{expected_param}' not found in OSFT config for {model_type}"
+        
+        # Verify rank values are correctly calculated
+        for param_name, rank in osft_config.items():
+            param = dict(model.named_parameters())[param_name]
+            expected_rank = int(min(param.shape) * 0.5)
+            if expected_rank >= min(param.shape):
+                expected_rank = min(param.shape) - 1
+            assert rank == expected_rank, \
+                f"Rank mismatch for {param_name} in {model_type}: got {rank}, expected {expected_rank}"
+    
+
 
 
 class TestOSFTModelCreation:

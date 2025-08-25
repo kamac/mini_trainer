@@ -28,13 +28,6 @@ class SVDDecompositionDict(SVDDictBase, total=False):
     rank_high: int
 
 
-def is_osft_param(name: str, param: torch.Tensor, osft_config: dict) -> bool:
-    """
-    Utility function to make it easier to classify OSFT parameters.
-    """
-    return len(param.shape) == 2 and name in osft_config and osft_config[name] > 0
-
-
 class OSFTModelProtocol(Protocol):
     """
     Protocol defining the interface for models with OSFT capabilities.
@@ -76,6 +69,144 @@ class OSFTModelProtocol(Protocol):
 
 # Type alias for any model that implements OSFT
 OSFTModel = OSFTModelProtocol
+
+
+# Pre-defined model configurations for common architectures
+MODEL_CONFIGS = {
+    "llama": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj", 
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.down_proj",
+            "mlp.up_proj",
+        ]
+    },
+    "mistral": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.up_proj",
+            "mlp.down_proj",
+        ]
+    },
+    "gpt-j": {
+        "patterns": [
+            "attn.q_proj",
+            "attn.k_proj",
+            "attn.v_proj", 
+            "attn.out_proj",
+            "mlp.fc_in",
+            "mlp.fc_out",
+        ]
+    },
+    "gpt-neo": {
+        "patterns": [
+            "attn.attention.q_proj",
+            "attn.attention.k_proj",
+            "attn.attention.v_proj",
+            "attn.attention.out_proj", 
+            "mlp.c_fc",
+            "mlp.c_proj",
+        ]
+    },
+    "opt": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.out_proj",
+            "fc1",
+            "fc2",
+        ]
+    },
+    "qwen": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj", 
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.down_proj",
+            "mlp.up_proj",
+        ]
+    },
+    "gemma": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.up_proj",
+            "mlp.down_proj",
+        ],
+    },
+    "phi3": {
+        "patterns": [
+            "self_attn.o_proj",
+            "self_attn.qkv_proj",
+            "mlp.gate_up_proj",
+            "mlp.down_proj",
+        ]
+    },
+    # granite-4 architecture may change so this will likely
+    # need to be updated then
+    "granite": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.down_proj",
+            "mlp.up_proj",
+        ]
+    },
+    "default": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj", 
+            "mlp.gate_proj",
+            "mlp.down_proj",
+            "mlp.up_proj",
+        ]
+    }
+}
+
+# Define model name mappings at module level
+MODEL_NAME_MAPPINGS = {
+    "llama": "llama",
+    "gpt-j": "gpt-j", 
+    "gptj": "gpt-j",  # Handle both "gpt-j" and "gptj" variants
+    "gpt-neo": "gpt-neo",
+    "gptneo": "gpt-neo",  # Handle both "gpt-neo" and "gptneo" variants
+    "opt": "opt",
+    "qwen": "qwen",
+    "gemma": "gemma",
+    "phi4": "phi3",
+    "phi-4": "phi3",  # this should handle phi-4, phi-4-mini, and phi-4-mini-instruct
+    "phi3": "phi3",
+    "phi-3": "phi3",
+    "mistral": "mistral",
+    "granite": "granite",
+    # Easy to add more mappings
+    # "phi": "phi", 
+}
+
+
+def is_osft_param(name: str, param: torch.Tensor, osft_config: dict) -> bool:
+    """
+    Utility function to make it easier to classify OSFT parameters.
+    """
+    return len(param.shape) == 2 and name in osft_config and osft_config[name] > 0
 
 
 def is_osft_model(model: torch.nn.Module) -> bool:
@@ -383,122 +514,19 @@ def broadcast_svd_results(model, assignments, world_size):
     # wait for all processes to synchronize
     dist.barrier()
 
-# Pre-defined model configurations for common architectures
-MODEL_CONFIGS = {
-    "llama": {
-        "patterns": [
-            "self_attn.q_proj",
-            "self_attn.k_proj", 
-            "self_attn.v_proj",
-            "self_attn.o_proj",
-            "mlp.gate_proj",
-            "mlp.down_proj",
-            "mlp.up_proj",
-        ]
-    },
-    "gpt-j": {
-        "patterns": [
-            "attn.q_proj",
-            "attn.k_proj",
-            "attn.v_proj", 
-            "attn.out_proj",
-            "mlp.fc_in",
-            "mlp.fc_out",
-        ]
-    },
-    "gpt-neo": {
-        "patterns": [
-            "attn.attention.q_proj",
-            "attn.attention.k_proj",
-            "attn.attention.v_proj",
-            "attn.attention.out_proj", 
-            "mlp.c_fc",
-            "mlp.c_proj",
-        ]
-    },
-    "opt": {
-        "patterns": [
-            "self_attn.q_proj",
-            "self_attn.k_proj",
-            "self_attn.v_proj",
-            "self_attn.out_proj",
-            "fc1",
-            "fc2",
-        ]
-    },
-    "qwen": {
-        "patterns": [
-            "self_attn.q_proj",
-            "self_attn.k_proj",
-            "self_attn.v_proj", 
-            "self_attn.o_proj",
-            "mlp.gate_proj",
-            "mlp.down_proj",
-            "mlp.up_proj",
-        ]
-    },
-    "gemma": {
-        "patterns": [
-            "self_attn.q_proj",
-            "self_attn.k_proj",
-            "self_attn.v_proj",
-            "self_attn.o_proj",
-            "mlp.gate_proj",
-            "mlp.up_proj",
-            "mlp.down_proj",
-        ],
-    },
-    "phi-4-mini-instruct": {
-        "patterns": [
-            "self_attn.o_proj",
-            "self_attn.qkv_proj",
-            "mlp.gate_up_proj",
-            "mlp.down_proj"
-        ]
-    },
-    "default": {
-        "patterns": [
-            "self_attn.q_proj",
-            "self_attn.k_proj",
-            "self_attn.v_proj",
-            "self_attn.o_proj", 
-            "mlp.gate_proj",
-            "mlp.down_proj",
-            "mlp.up_proj",
-        ]
-    }
-}
-
-# Define model name mappings at module level (add this near the top with other constants)
-MODEL_NAME_MAPPINGS = {
-    "llama": "llama",
-    "gpt-j": "gpt-j", 
-    "gptj": "gpt-j",  # Handle both "gpt-j" and "gptj" variants
-    "gpt-neo": "gpt-neo",
-    "gptneo": "gpt-neo",  # Handle both "gpt-neo" and "gptneo" variants
-    "opt": "opt",
-    "qwen": "qwen",
-    "gemma": "gemma",
-    "phi-4-mini-instruct": "phi-4-mini-instruct"
-    # Easy to add more mappings
-    # "mistral": "mistral",
-    # "phi": "phi", 
-    # "gemma": "gemma",
-}
-
 def _get_model_patterns_from_name(name: str) -> list:
     """
     Get model patterns from a model name string.
     
     Args:
-        name: Model name string (already lowercased)
+        name: Model name string
         
     Returns:
         List of patterns for the model
     """
     # Find first matching model type
     for identifier, config_key in MODEL_NAME_MAPPINGS.items():
-        if identifier in name:
+        if identifier in name.lower():
             return MODEL_CONFIGS[config_key]["patterns"]
     
     # Default fallback
@@ -507,13 +535,14 @@ def _get_model_patterns_from_name(name: str) -> list:
 def get_model_patterns(model_name_or_class):
     """Get patterns for a model from name string or class object."""
     # Handle string model names
-    if isinstance(model_name_or_class, str):
-        model_name = model_name_or_class.lower()
-        return _get_model_patterns_from_name(model_name)
+    name = model_name_or_class
+    if not isinstance(name, str):
+        if hasattr(name, "__name__"):
+            name = name.__name__
+        else:
+            raise ValueError(f"Invalid model name or class: {model_name_or_class} (expected str or class object)")
     
-    # Handle model class objects
-    class_name = model_name_or_class.__name__.lower()
-    return _get_model_patterns_from_name(class_name)
+    return _get_model_patterns_from_name(name)
 
 
 def get_model_config(model_name_or_class=None, target_patterns=None):
