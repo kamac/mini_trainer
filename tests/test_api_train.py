@@ -28,7 +28,7 @@ class TestDataclasses:
         assert args.nproc_per_node == 1
         assert args.node_rank == 0
         assert args.rdzv_id == 123
-        assert args.rdzv_endpoint == "127.0.0.1"
+        assert args.rdzv_endpoint == "127.0.0.1:1738"
         
         # Test with custom nproc_per_node only
         args = TorchrunArgs(nproc_per_node=8)
