@@ -29,6 +29,7 @@ def take_gradient_step(model, optimizer, lr_scheduler):
     optimizer.zero_grad()
     return grad_norm
 
+
 def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
     from huggingface_hub import split_torch_state_dict_into_shards
     from transformers import AutoTokenizer
@@ -39,13 +40,44 @@ def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
     rank = torch.distributed.get_rank()
     save_directory = Path(output_dir) / "hf_format" / f"samples_{samples_seen}"
     os.makedirs(save_directory, exist_ok=True)
-    # Get full state dict
+    
+    # NOTE(osilkin):
+    # Here, we gather the model's state-dict and offload it onto the CPU
+    # The downside with this approach is that it requires recomputing
+    # each OSFT parameter on the CPU.
+    # This can be optimized by modifying the `prepare_state_dict_for_save` function so that it
+    # processes weights on the GPU device in batches before de-allocating the memory being consumed
+    # Users may also face issues here if they lack the CPU memory required to store the original
+    # FP32 state dict on CPU.
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
-    state_dict = get_model_state_dict(fsdp_model, options=StateDictOptions(full_state_dict=True))
-    inner = getattr(fsdp_model, "module", fsdp_model)
-    if hasattr(inner, "prepare_state_dict_for_save"):
-        state_dict = inner.prepare_state_dict_for_save(state_dict)
-    state_dict = {k: v.to(torch.bfloat16) for k, v in state_dict.items()}
+    state_dict = get_model_state_dict(
+        fsdp_model,
+        options=StateDictOptions(
+            full_state_dict=True,
+            cpu_offload=True,
+            broadcast_from_rank0=False,
+        )
+    )
+
+    if rank == 0:
+        # Unfortunately this process takes quite a bit on the CPU.
+        inner = getattr(fsdp_model, "module", fsdp_model)
+        if hasattr(inner, "prepare_state_dict_for_save"):
+            state_dict = inner.prepare_state_dict_for_save(state_dict)
+        
+    torch.distributed.barrier()
+
+    # Once we have all of our parameters, we need to ensure they're stored in BF16
+    # so checkpoints aren't terrible heavy. We have to do this _after_ `prepare_state_dict_for_save`
+    # has been called so we don't lose fidelity.
+    notified_about_dtype = False
+    cpu_device = torch.device('cpu')
+    for k, v in state_dict.items():
+        if v.dtype != torch.bfloat16:
+            if not notified_about_dtype:
+                log_rank_0(f"⚠️  Warning: Found tensor {k} with dtype {v.dtype}, casting to bfloat16")
+                notified_about_dtype = True
+            state_dict[k] = v.to(dtype=torch.bfloat16, device=cpu_device)
     
     if rank == 0:
         pattern = "model{suffix}.safetensors"
@@ -66,12 +98,13 @@ def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
             index = {"metadata": split.metadata, "weight_map": split.tensor_to_filename}
             with open(os.path.join(save_directory, index_name), "w") as f:
                 json.dump(index, f, indent=2, sort_keys=True)
-        # Save config and tokenizer (unwrap inner module)
-        inner = getattr(fsdp_model, "module", fsdp_model)
+        # Save config and tokenizer
         inner.config.to_json_file(os.path.join(save_directory, "config.json"))
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         tokenizer.save_pretrained(save_directory)
-        log_rank_0(f"\033[1;38;2;0;255;255mSaved model at\033[0m {samples_seen} samples in {time.time() - start:.2f} seconds")
+        log_rank_0(f"✅ Saved model at {samples_seen} samples in {time.time() - start:.2f} seconds")
+    
+    log_rank_0("")
     torch.distributed.barrier()
 
 def reached_stop_condition(
@@ -320,6 +353,7 @@ def train(
                         "time_per_batch": batch_time,
                         "tokens_per_second": bm['num_total_tokens']/batch_time,
                         "total_samples_accumulated": total_samples_accumulated, 
+                        "total_tokens_accumulated": total_tokens_processed,
                         "samples_per_second": bm['num_samples']/batch_time,
                         "peak_memory_usage_GB": float(torch.cuda.max_memory_allocated() / 1e9),
                     }
