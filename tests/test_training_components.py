@@ -233,6 +233,7 @@ class TestSaveModel:
         model.module = MagicMock()
         model.module.config = MagicMock()
         model.module.config.to_json_file = MagicMock()
+        model.module.config.torch_dtype = torch.bfloat16  # Set a proper dtype instead of MagicMock
         model.module.prepare_state_dict_for_save = MagicMock(side_effect=lambda x: x)
         return model
     
@@ -354,7 +355,7 @@ class TestSaveModel:
                 mock_fsdp_model,
                 samples_seen=1000,
                 output_dir=temp_dir,
-                model_name_or_path="test/model"
+                model_name_or_path="test/model",
             )
         
         # Should save multiple shards

@@ -215,7 +215,8 @@ class TestOSFTModelDtypeIntegration:
     @patch('torch.distributed.get_rank', return_value=0)
     @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM')
     @patch('mini_trainer.setup_model_for_training.AutoTokenizer')
-    def test_setup_model_assigns_dtype_attributes(self, mock_tokenizer, mock_model_class, 
+    @patch('mini_trainer.setup_model_for_training.AutoConfig')
+    def test_setup_model_assigns_dtype_attributes(self, mock_auto_config, mock_tokenizer, mock_model_class, 
                                                  mock_get_rank, mock_is_initialized, 
                                                  mock_align, mock_create_osft):
         """Test that setup_model correctly assigns dtype attributes to OSFT model."""
@@ -258,9 +259,9 @@ class TestOSFTModelDtypeIntegration:
             model_name_or_path="test-model",
             osft=True,
             rank=0,
-            upcast_dtype=torch.float32,
-            output_dtype=torch.bfloat16,
-            osft_unfreeze_rank_ratio=0.5
+            osft_upcast_dtype=torch.float32,
+            osft_output_dtype=torch.bfloat16,
+            osft_rank_ratio=0.5
         )
         
         # Verify the attributes were set correctly on the returned model

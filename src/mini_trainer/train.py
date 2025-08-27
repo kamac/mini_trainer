@@ -21,16 +21,48 @@ app = Typer(
     pretty_exceptions_short=True   
 )
 
+def validate_fp32_training_state(model, optimizer):
+    """
+    Validates that the model, optimizer, and gradients are all in FP32.
+    """
+    for name, param in model.named_parameters():
+        if param.dtype != torch.float32:
+            raise ValueError(f"Parameter {name} is not in FP32")
+    for name, param in optimizer.state.items():
+        for k, v in param.items():
+            if v.dtype != torch.float32: 
+                raise ValueError(f"Optimizer state {name}.{k} is not in FP32")
+    for name, grad in model.named_parameters():
+        if grad.dtype != torch.float32:
+            raise ValueError(f"Gradient {name} is not in FP32")
+
+
 def take_gradient_step(model, optimizer, lr_scheduler):
     """Scales gradients, applies clipping, and takes an optimization step."""
     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
     lr_scheduler.step()
+    # keep this here in case mixed precision settings are ever broken
+    validate_fp32_training_state(model, optimizer)
     optimizer.zero_grad()
     return grad_norm
 
 
-def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
+def save_model(
+    fsdp_model, 
+    samples_seen: int,
+    output_dir: str,
+    model_name_or_path: str,
+):
+    """
+    Save the given FSDP Model as a checkpoint in HF Format.
+
+    Args:
+        fsdp_model (str): The model to save.
+        samples_seen (int): The number of samples seen so far.
+        output_dir (str): The directory to save the model.
+        model_name_or_path (str): The model name or path.
+    """
     from huggingface_hub import split_torch_state_dict_into_shards
     from transformers import AutoTokenizer
     from safetensors.torch import save_file
@@ -58,10 +90,13 @@ def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
             broadcast_from_rank0=False,
         )
     )
+    inner = getattr(fsdp_model, "module", fsdp_model)
+    # save in whatever data type is stored on the model config
+    # by now the `torch_dtype` attribute has been set to some value
+    save_dtype = inner.config.torch_dtype  
 
+    # Unfortunately this process takes quite a bit on the CPU.
     if rank == 0:
-        # Unfortunately this process takes quite a bit on the CPU.
-        inner = getattr(fsdp_model, "module", fsdp_model)
         if hasattr(inner, "prepare_state_dict_for_save"):
             state_dict = inner.prepare_state_dict_for_save(state_dict)
         
@@ -73,12 +108,12 @@ def save_model(fsdp_model, samples_seen, output_dir, model_name_or_path):
     notified_about_dtype = False
     cpu_device = torch.device('cpu')
     for k, v in state_dict.items():
-        if v.dtype != torch.bfloat16:
+        if v.dtype != save_dtype:
             if not notified_about_dtype:
-                log_rank_0(f"⚠️  Warning: Found tensor {k} with dtype {v.dtype}, casting to bfloat16")
+                log_rank_0(f"⚠️  Warning: Found tensor {k} with dtype {v.dtype}, casting to {save_dtype}")
                 notified_about_dtype = True
-            state_dict[k] = v.to(dtype=torch.bfloat16, device=cpu_device)
-    
+            state_dict[k] = v.to(dtype=save_dtype, device=cpu_device)
+ 
     if rank == 0:
         pattern = "model{suffix}.safetensors"
         index_name = "model.safetensors.index.json"
@@ -441,8 +476,6 @@ def calculate_num_training_steps(
     else:
         raise ValueError(f"Unknown training mode: {training_mode}")
 
-
-
 @app.command()
 def main(
     # the '...' is a way of defining required options/arguments without breaking Python's
@@ -468,7 +501,6 @@ def main(
     osft_upcast_dtype: Annotated[str | None, Option(help="Upcast dtype for OSFT computations. Can be 'float16', 'bfloat16', 'float32', etc.")] = "float32",
     osft_output_dtype: Annotated[str | None, Option(help="Output dtype for OSFT. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc.")] = None,
 
-
     output_dir: Annotated[str, Option(help="Directory to save checkpoints and logs (required)")] = ...,
     min_samples_per_checkpoint: Annotated[int | None, Option(help="Minimum number of samples processed before saving a checkpoint (required)")] = None,
 
@@ -479,8 +511,8 @@ def main(
     max_tokens: Annotated[int, Option(help="Maximum number of loss-counted tokens (for token mode)")] = 0,
     checkpoint_at_epoch: Annotated[bool, Option(help="Whether to save checkpoints at the end of each epoch")] = False,
     save_final_checkpoint: Annotated[bool, Option(help="Whether to save a final checkpoint when training ends")] = False,
+    save_dtype: Annotated[str | None, Option(help="Dtype to save the model in. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc.")] = None,
 ):
-    
     
     init_distributed_environment()
     # TODO: make the path creation lazy, but confirm that we can write to the given directory
@@ -520,6 +552,7 @@ def main(
             "osft_output_dtype": osft_output_dtype,
             "output_dir": output_dir,
             "min_samples_per_checkpoint": min_samples_per_checkpoint,
+            "save_dtype": save_dtype,
             "training_mode": training_mode.value,
             "max_epochs": max_epochs,
             "max_steps": max_steps,
@@ -571,6 +604,7 @@ def main(
     osft_rank_ratio = None if osft_unfreeze_rank_ratio is None else (1.0 - osft_unfreeze_rank_ratio)
     model = setup_model(
         model_name_or_path=model_name_or_path,
+        save_dtype=save_dtype,
         use_liger_kernels=use_liger_kernels,
         osft=osft,
         rank=rank,
@@ -596,6 +630,7 @@ def main(
         output_dir=output_dir,
         min_samples_per_checkpoint=min_samples_per_checkpoint,
         model_name_or_path=model_name_or_path,
+        save_dtype=save_dtype,
         training_mode=training_mode,
         max_epochs=max_epochs,
         max_steps=max_steps,

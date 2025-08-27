@@ -762,9 +762,10 @@ class TestSetupModelIntegration:
     @patch('mini_trainer.setup_model_for_training.log_rank_0')
     @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM')
     @patch('mini_trainer.setup_model_for_training.AutoTokenizer')
+    @patch('mini_trainer.setup_model_for_training.AutoConfig')
     @patch('mini_trainer.osft_utils.auto_generate_target_osft_config')
     @patch('mini_trainer.osft_utils.create_osft_model_class')
-    def test_osft_params_flow_through_setup(self, mock_osft_class, mock_auto_config, mock_tokenizer_cls, mock_model_cls, mock_log):
+    def test_osft_params_flow_through_setup(self, mock_osft_class, mock_auto_config, mock_transformers_auto_config, mock_tokenizer_cls, mock_model_cls, mock_log):
         """Test that OSFT parameters flow through the setup correctly."""
         # Test that OSFT model creation gets the right parameters
         mock_auto_config.return_value = {"layer.weight": 10}

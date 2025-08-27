@@ -77,4 +77,5 @@ class TrainingArgs:
     # Checkpointing
     checkpoint_at_epoch: bool = field(default=False, metadata={"help": "Whether to checkpoint at the end of each epoch."})
     save_final_checkpoint: bool = field(default=True, metadata={"help": "Whether the model should be saved at the end of training or not. Off by default to avoid accidentally overwriting the best checkpoint."})
+    save_dtype: str | None = field(default=None, metadata={"help": "The dtype to save the model in. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc."})
 

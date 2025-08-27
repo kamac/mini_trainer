@@ -131,6 +131,9 @@ def run_training(torch_args: TorchrunArgs, train_args: TrainingArgs) -> None:
     
     if train_args.save_final_checkpoint:
         command.append("--save-final-checkpoint")
+ 
+    if train_args.save_dtype:
+        command.append(f"--save-dtype={train_args.save_dtype}")
     
     logger.info("Running training command as subprocess: %s", " ".join(command))
     

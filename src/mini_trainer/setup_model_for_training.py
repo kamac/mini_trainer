@@ -8,7 +8,7 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     checkpoint_wrapper as ptd_checkpoint_wrapper,
 )
 from torch.distributed.device_mesh import init_device_mesh
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from mini_trainer.utils import log_rank_0, patch_target_module
 from mini_trainer.osft_utils import OSFTModel
 
@@ -96,18 +96,83 @@ def align_model_and_tokenizer(model, tokenizer):
     return model
 
 
+def get_model_save_dtype(save_dtype: str | torch.dtype | None, model_name_or_path: str) -> torch.dtype:
+    """
+    Given an HF model reference and an optional user-provided save_dtype, returns the PyTorch data type that it should
+    be saved in.
+
+    If the user does not provide a save_dtype, we will use the model's original dtype.
+    However; if the data-type is not in the supported list, we will raise an error.
+
+    If both the model `torch_dtype` and user-provided `save_dtype` are missing,
+    we default to saving in BF16.
+
+    Args:
+        save_dtype (str | None): The dtype we should be saving the model as.
+        model_name_or_path (str): The name or path of the model to load.
+    Returns:
+        The PyTorch data type that the model should be saved in.
+
+    """
+    dtype_map = {
+        "float32": torch.float32,
+        "float": torch.float32,
+        "float64": torch.float64,
+        "double": torch.float64,
+        "float16": torch.float16,
+        "half": torch.float16,
+        "bfloat16": torch.bfloat16,
+    }
+    default_dtype = torch.bfloat16
+    
+    # FSDP2 requires us to load the model in FP32 to begin with for the
+    # correct mixed-precision settings. So to circumvent this, we load the 
+    # original model's config separately 
+    original_config = AutoConfig.from_pretrained(model_name_or_path)
+    original_dtype = getattr(original_config, "torch_dtype", None)
+    
+    # HF models return a torch.dtype from this field, but docs mark it as an optional string
+    if original_dtype is not None and isinstance(original_dtype, str):
+        original_dtype = dtype_map[original_dtype]
+
+    # this handles the case when save_dtype > original_dtype > bf16
+    if not original_dtype and not save_dtype:
+        log_rank_0(f"⚠️ Model does not have a setting for `torch_dtype` and not `save_dtype` was provided, falling back to '{default_dtype}'")
+        return default_dtype
+
+    # handles the case save_dtype > original_dtype
+    if not save_dtype:
+        return original_dtype
+    
+    # by now we know that we are going to use a custom data type, so we just validate
+    if not isinstance(save_dtype, (str, torch.dtype)):
+        raise ValueError(f"error: could not recognize '{save_dtype}' as a supported dtype for saving model checkpoints")
+ 
+    # convert dtype to a str
+    if isinstance(save_dtype, str):
+        if save_dtype not in dtype_map:
+            raise ValueError(f"error: could not recognize '{save_dtype}' as a supported dtype for saving model checkpoints")
+        save_dtype = dtype_map[save_dtype]
+    
+    # alert the user when the dtype differs
+    if original_dtype and original_dtype != save_dtype:
+        log_rank_0(f"⚠️ Model's original dtype is '{original_dtype}', but new checkpoints will be saved as '{save_dtype}'. ⚠️")
+    return save_dtype
+
+
 def setup_model(
-    model=None,
+    model_name_or_path: str,
     osft: bool = False,
     rank: int = 0,
-    upcast_dtype: torch.dtype = torch.float32,
-    output_dtype: torch.dtype | None = None,
+    save_dtype: str | torch.dtype | None = None,
+    osft_upcast_dtype: torch.dtype = torch.float32,
+    osft_output_dtype: torch.dtype | None = None,
     osft_rank_ratio: float | None = None,
     osft_target_patterns: list[str] | None = None,
-    **kwargs,
+    use_liger_kernels: bool = False,
 ) -> torch.nn.Module | OSFTModel:
     base_model_args = {
-        "pretrained_model_name_or_path": kwargs['model_name_or_path'],
+        "pretrained_model_name_or_path": model_name_or_path,
     }
     # Check if flash_attn is available, otherwise use eager
     # in practice we will need flash attention when running this repo
@@ -120,9 +185,9 @@ def setup_model(
         else:
             raise e
 
-    tokenizer = AutoTokenizer.from_pretrained(kwargs["model_name_or_path"])
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
-    if kwargs.get("use_liger_kernels", False):
+    if use_liger_kernels:
         """need to patch the loss function to not reduce, so we can reduce across all GPUs"""
         from mini_trainer.none_reduction_losses import (
             liger_fixed_fused_linear_cross_entropy_none_reduction,
@@ -173,9 +238,9 @@ def setup_model(
         
         # we need to set these as attributes because HF Transformers
         # doesn't like torch.dtype to be passed in through kwargs (aside from the `torch_dtype` kwarg)
-        model.upcast_dtype = upcast_dtype
-        if output_dtype:
-            model.output_dtype = output_dtype
+        model.upcast_dtype = osft_upcast_dtype
+        if osft_output_dtype:
+            model.output_dtype = osft_output_dtype
 
         model = align_model_and_tokenizer(model, tokenizer)
         device = torch.device("cuda", rank)
@@ -208,6 +273,11 @@ def setup_model(
     # Choose whether to apply orthogonal subspace learning (OSL) based on `osft` flag
     # OSL enables continual fine-tuning by constraining updates to low-rank directions orthogonal to critical knowledge that is to be preserved
     model = load_osft_model() if osft else load_standard_model()
+
+    # here we handle configuring the save_dtype
+    model.config.torch_dtype = get_model_save_dtype(save_dtype, model_name_or_path)
+    if not model.config.torch_dtype:
+        raise ValueError("error: model does not have a `torch_dtype` setting, cannot save model in this dtype")
 
     if model.__class__.__name__ not in [
         "MistralForCausalLM",
