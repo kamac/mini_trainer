@@ -25,7 +25,7 @@ class TorchrunArgs:
     nproc_per_node: int = 1
     node_rank: int = 0
     rdzv_id: int = 123
-    rdzv_endpoint: str = "127.0.0.1"
+    rdzv_endpoint: str = "127.0.0.1:1738"
 
 
 @dataclass
