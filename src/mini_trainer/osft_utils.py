@@ -1067,7 +1067,8 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             log_rank_0("Reconstructing OSFT weights for checkpoint saving...")
             
             # Process parameters one at a time to minimize peak memory usage
-            for i, (orig, safe) in enumerate(self.name_mapping.items()):
+            from tqdm import tqdm
+            for i, (orig, safe) in enumerate(tqdm(self.name_mapping.items(), desc="Reconstructing OSFT weights, this may take a while...", disable=torch.distributed.get_rank() != 0)):
                 # Extract SVD components
                 U_high = state_dict.pop(f"{safe}_U_high")
                 S_high = state_dict.pop(f"{safe}_S_high")

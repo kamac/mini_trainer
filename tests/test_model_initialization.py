@@ -177,8 +177,9 @@ class TestSetupModel:
     
     @patch('mini_trainer.setup_model_for_training.AutoTokenizer.from_pretrained')
     @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM.from_pretrained')
+    @patch('mini_trainer.setup_model_for_training.AutoConfig.from_pretrained')
     @patch('mini_trainer.setup_model_for_training.align_model_and_tokenizer')
-    def test_setup_model_standard(self, mock_align, mock_model_cls, mock_tokenizer_cls):
+    def test_setup_model_standard(self, mock_align, auto_config, mock_model_cls, mock_tokenizer_cls):
         """Test standard model setup without special features."""
         mock_tokenizer = MagicMock()
         mock_tokenizer_cls.return_value = mock_tokenizer
@@ -316,52 +317,56 @@ class TestIntegration:
     
     def test_end_to_end_mock(self):
         """Test end-to-end flow with mocks."""
-        with patch('mini_trainer.setup_model_for_training.AutoTokenizer.from_pretrained') as mock_tok:
-            with patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM.from_pretrained') as mock_model_cls:
-                with patch('mini_trainer.setup_model_for_training.wrap_fsdp2') as mock_wrap:
-                    with patch('mini_trainer.setup_model_for_training.log_rank_0'):
-                        mock_tokenizer = MagicMock()
-                        mock_tokenizer.__len__ = MagicMock(return_value=32000)  # Set proper length
-                        mock_tok.return_value = mock_tokenizer
-                        
-                        mock_model = MagicMock()
-                        mock_model.__class__.__name__ = "LlamaForCausalLM"
-                        mock_model.config = MagicMock()
-                        mock_model.config.vocab_size = 32000
-                        mock_model.parameters = MagicMock(return_value=[MagicMock()])
-                        mock_model_cls.return_value = mock_model
-                        
-                        mock_wrap.return_value = mock_model
-                        
-                        # Setup model
-                        model = setup_model(
-                            model_name_or_path="test/model",
-                            use_liger_kernels=False,
-                            osft=False,
-                            rank=0
-                        )
-                        
-                        # Setup training components
-                        with patch('mini_trainer.setup_model_for_training.torch.optim.AdamW') as mock_adamw:
-                            with patch('transformers.get_scheduler') as mock_sched:
-                                with patch('mini_trainer.osft_utils.optim_wrapper') as mock_opt_wrap:
-                                    mock_optimizer = MagicMock()
-                                    mock_adamw.return_value = mock_optimizer
-                                    mock_opt_wrap.return_value = mock_optimizer
-                                    
-                                    mock_scheduler = MagicMock()
-                                    mock_sched.return_value = mock_scheduler
-                                    
-                                    model, optimizer, scheduler = setup_training_components(
-                                        model,
-                                        learning_rate=1e-5,
-                                        num_warmup_steps=10,
-                                        lr_scheduler="constant"
-                                    )
-                                    
-                                    assert model is not None
-                                    assert optimizer is not None
-                                    assert scheduler is not None
+        with (
+            patch('mini_trainer.setup_model_for_training.AutoTokenizer.from_pretrained') as mock_tok,
+            patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM.from_pretrained') as mock_model_cls,
+            patch('mini_trainer.setup_model_for_training.AutoConfig.from_pretrained') as mock_config,
+            patch('mini_trainer.setup_model_for_training.wrap_fsdp2') as mock_wrap,
+            patch('mini_trainer.setup_model_for_training.log_rank_0'),
+            patch('mini_trainer.setup_model_for_training.torch.optim.AdamW') as mock_adamw,
+            patch('transformers.get_scheduler') as mock_sched,
+            patch('mini_trainer.osft_utils.optim_wrapper') as mock_opt_wrap
+        ):
+            # Setup tokenizer mock
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.__len__ = MagicMock(return_value=32000)
+            mock_tok.return_value = mock_tokenizer
+            
+            # Setup model mock
+            mock_model = MagicMock()
+            mock_model.__class__.__name__ = "LlamaForCausalLM"
+            mock_model.config = MagicMock()
+            mock_model.config.vocab_size = 32000
+            mock_model.parameters = MagicMock(return_value=[MagicMock()])
+            mock_model_cls.return_value = mock_model
+            mock_wrap.return_value = mock_model
+            
+            # Setup optimizer and scheduler mocks
+            mock_optimizer = MagicMock()
+            mock_adamw.return_value = mock_optimizer
+            mock_opt_wrap.return_value = mock_optimizer
+            mock_scheduler = MagicMock()
+            mock_sched.return_value = mock_scheduler
+            
+            # Setup model
+            model = setup_model(
+                model_name_or_path="test/model",
+                use_liger_kernels=False,
+                osft=False,
+                rank=0
+            )
+            
+            # Setup training components
+            model, optimizer, scheduler = setup_training_components(
+                model,
+                learning_rate=1e-5,
+                num_warmup_steps=10,
+                lr_scheduler="constant"
+            )
+            
+            assert model is not None
+            assert optimizer is not None
+            assert scheduler is not None
 
 
 if __name__ == "__main__":
