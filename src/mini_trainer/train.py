@@ -28,13 +28,12 @@ def validate_fp32_training_state(model, optimizer):
     for name, param in model.named_parameters():
         if param.dtype != torch.float32:
             raise ValueError(f"Parameter {name} is not in FP32")
+        if param.grad is not None and param.grad.dtype != torch.float32:
+            raise ValueError(f"Gradient {name} is not in FP32")
     for name, param in optimizer.state.items():
         for k, v in param.items():
             if v.dtype != torch.float32: 
                 raise ValueError(f"Optimizer state {name}.{k} is not in FP32")
-    for name, grad in model.named_parameters():
-        if grad.dtype != torch.float32:
-            raise ValueError(f"Gradient {name} is not in FP32")
 
 
 def take_gradient_step(model, optimizer, lr_scheduler):
