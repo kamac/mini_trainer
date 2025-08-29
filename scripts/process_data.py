@@ -7,6 +7,66 @@ import numpy as np
 app = typer.Typer()
 
 
+def is_gpt_oss_model(tokenizer):
+    """Check if this is a GPT-OSS model based on tokenizer."""
+    if not tokenizer:
+        return False
+    try:
+        # GPT-OSS models have these special tokens
+        test_tokens = ["<|start|>", "<|channel|>", "<|message|>"]
+        for token in test_tokens:
+            # If any of these tokens can't be encoded, it's not GPT-OSS
+            tokenizer.encode(token, add_special_tokens=False)
+        return True
+    except:
+        return False
+
+
+def is_gpt_oss_assistant_channel(pos, original_ids, tokenizer):
+    """Check if current position is within a GPT-OSS assistant channel pattern."""
+    if not tokenizer:
+        return False
+    # Look for pattern: <|start|>assistant<|channel|>CHANNEL_NAME<|message|>
+    if pos >= len(original_ids):
+        return False
+    
+    # Try to encode the expected pattern tokens
+    try:
+        start_token = tokenizer.encode("<|start|>", add_special_tokens=False)
+        assistant_tokens = tokenizer.encode("assistant", add_special_tokens=False)
+        channel_token = tokenizer.encode("<|channel|>", add_special_tokens=False)
+        message_token = tokenizer.encode("<|message|>", add_special_tokens=False)
+    except:
+        return False
+    
+    # Look backwards from current position to see if we're in an assistant channel
+    for lookback in range(min(pos + 1, 50)):  # Look back up to 50 tokens
+        start_pos = pos - lookback
+        if start_pos < 0:
+            break
+        
+        # Check if we have the start of an assistant channel pattern
+        if (start_pos + len(start_token) + len(assistant_tokens) + len(channel_token) <= len(original_ids) and
+            original_ids[start_pos:start_pos + len(start_token)] == start_token and
+            original_ids[start_pos + len(start_token):start_pos + len(start_token) + len(assistant_tokens)] == assistant_tokens and
+            original_ids[start_pos + len(start_token) + len(assistant_tokens):start_pos + len(start_token) + len(assistant_tokens) + len(channel_token)] == channel_token):
+            
+            # Found assistant channel start, now look for the message token ahead
+            message_start = start_pos + len(start_token) + len(assistant_tokens) + len(channel_token)
+            for forward in range(min(len(original_ids) - message_start, 20)):  # Look forward up to 20 tokens for message token
+                if (message_start + forward + len(message_token) <= len(original_ids) and
+                    original_ids[message_start + forward:message_start + forward + len(message_token)] == message_token):
+                    # Found complete assistant channel pattern
+                    message_end = message_start + forward + len(message_token)
+                    # Check if current position is between message token and next special sequence
+                    if pos >= message_end:
+                        return True
+                    break
+            break
+    
+    return False
+
+
 def make_input_ids_from_messages(sample: dict, tokenizer):
     sample['pretrain'] = False
     sample['error'] = False
@@ -24,15 +84,20 @@ def make_input_ids_from_messages(sample: dict, tokenizer):
             sample['input_ids'] = tokenizer.apply_chat_template(sample['messages'], tokenize=True)
             messages = sample['messages']
             for m in messages:
-                if m['role'] == "assistant" and not m['content']:
-                    sample['error'] = True
+                # Check if assistant has content, thinking, or reasoning_content
+                if m['role'] == "assistant":
+                    has_content = bool(m.get('content'))
+                    has_thinking = bool(m.get('thinking'))
+                    has_reasoning = bool(m.get('reasoning_content'))
+                    if not (has_content or has_thinking or has_reasoning):
+                        sample['error'] = True
         sample['len'] = len(sample['input_ids'])
         return sample
     except Exception as e:
         sample['error'] = True
         return sample
 
-def make_labels_from_input_ids(sample: dict, assistant_tk_ids: list, user_tk_ids: list):
+def make_labels_from_input_ids(sample: dict, assistant_tk_ids: list, user_tk_ids: list, tokenizer=None):
     '''    
     Create training labels by unmasking only the assistant's reply tokens and masking all other tokens (user messages and special delimiters) with -100. For pretraining samples, labels equal the input_ids.
     '''
@@ -43,6 +108,10 @@ def make_labels_from_input_ids(sample: dict, assistant_tk_ids: list, user_tk_ids
     original_ids = sample['input_ids']
     labels = []
     unmasking = False
+    
+    # Check if this is a GPT-OSS model for special handling
+    is_gpt_oss = is_gpt_oss_model(tokenizer)
+    
     i = 0
     while i < len(original_ids):
         # Check if the next tokens match the assistant delimiter sequence
@@ -56,6 +125,12 @@ def make_labels_from_input_ids(sample: dict, assistant_tk_ids: list, user_tk_ids
             unmasking = False
             # i += len(user_tk_ids)
             # continue
+        
+        # Special case: Check for GPT-OSS assistant channel patterns
+        # For GPT-OSS, always unmask assistant channels
+        if is_gpt_oss and is_gpt_oss_assistant_channel(i, original_ids, tokenizer):
+            unmasking = True
+        
         # else:
         token = original_ids[i]
         if unmasking:
@@ -171,7 +246,7 @@ def process_data(
     print("\033[38;5;196m" + f"Total number of filtered samples after removing samples longer than {max_sample_num_tokens} tokens: {len(dataset) - len(dataset_with_input_ids)}" + "\033[0m")
     
     dataset_with_labels = dataset_with_input_ids.map(
-        lambda x: make_labels_from_input_ids(x, assistant_tk_ids, user_tk_ids),
+        lambda x: make_labels_from_input_ids(x, assistant_tk_ids, user_tk_ids, tokenizer),
         num_proc=64,
     )
 

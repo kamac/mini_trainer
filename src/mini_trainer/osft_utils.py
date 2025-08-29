@@ -74,6 +74,26 @@ class OSFTModelProtocol(Protocol):
 OSFTModel = OSFTModelProtocol
 
 
+# OSFT parameter classification constants
+OSFT_ALL_PARAMS = {
+    'osft_config', 'initialize_osft', 'rank_ratio', 'target_patterns',
+    'upcast_dtype', 'output_dtype', 'model_name_or_class'
+}
+
+# Parameters that GPT-OSS constructors don't accept and must be filtered out
+OSFT_GPT_OSS_FILTERED_PARAMS = OSFT_ALL_PARAMS
+
+# Parameters that base model loading doesn't accept (subset of GPT-OSS filtered)
+OSFT_BASE_MODEL_FILTERED_PARAMS = {
+    'osft_config', 'initialize_osft', 'rank_ratio', 'target_patterns'
+}
+
+# Parameters that OSFT class constructors can handle
+OSFT_CLASS_PARAMS = {
+    'upcast_dtype', 'output_dtype', 'model_name_or_class'
+}
+
+
 # Pre-defined model configurations for common architectures
 MODEL_CONFIGS = {
     "llama": {
@@ -171,6 +191,17 @@ MODEL_CONFIGS = {
             "mlp.up_proj",
         ]
     },
+    "gpt-oss": {
+        "patterns": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            # Removed expert layer patterns to avoid MoE complexity
+            # "experts.gate_up_proj",
+            # "experts.down_proj",
+        ]
+    },
     "default": {
         "patterns": [
             "self_attn.q_proj",
@@ -191,6 +222,7 @@ MODEL_NAME_MAPPINGS = {
     "gptj": "gpt-j",  # Handle both "gpt-j" and "gptj" variants
     "gpt-neo": "gpt-neo",
     "gptneo": "gpt-neo",  # Handle both "gpt-neo" and "gptneo" variants
+    "gpt-oss": "gpt-oss",
     "opt": "opt",
     "qwen": "qwen",
     "gemma": "gemma",
@@ -464,9 +496,36 @@ def partition_svd_computation(target_params, world_size):
     return assignments
 
 
+def _broadcast_tensor_device_aware(tensor, src_rank):
+    """
+    Broadcasts a tensor that might be on CPU by temporarily moving to GPU if needed.
+    
+    Args:
+        tensor: The tensor to broadcast (might be on CPU or GPU)
+        src_rank: The source rank for broadcasting
+    """
+    # If tensor is on CPU, we need to move to GPU for NCCL broadcasting
+    if tensor.device.type == 'cpu':
+        current_rank = dist.get_rank()
+        gpu_device = torch.device('cuda', current_rank)
+        tensor_gpu = tensor.to(gpu_device)
+        
+        # Broadcast the GPU tensor
+        dist.broadcast(tensor_gpu, src=src_rank)
+        
+        # Only non-source ranks need to copy the received data back
+        if current_rank != src_rank:
+            tensor.data.copy_(tensor_gpu.to('cpu'))
+        # Source rank doesn't need to copy - it already has the correct data!
+    else:
+        # Tensor is already on GPU, broadcast normally
+        dist.broadcast(tensor, src=src_rank)
+
+
 def broadcast_svd_results(model, assignments, world_size):
     """
     Broadcasts SVD computation results from each rank to all other ranks.
+    Handles mixed CPU/GPU tensors by temporarily moving CPU tensors to GPU for broadcasting.
 
     Args:
         model: The model with SVD parameters
@@ -496,7 +555,7 @@ def broadcast_svd_results(model, assignments, world_size):
         for component_name in buffer_components:
             if hasattr(model, component_name):
                 tensor = getattr(model, component_name)
-                dist.broadcast(tensor, src=src_rank)
+                _broadcast_tensor_device_aware(tensor, src_rank)
             else:
                 raise AttributeError(f"Warning: Buffer {component_name} not found in model")
 
@@ -507,10 +566,10 @@ def broadcast_svd_results(model, assignments, world_size):
         if safe_name in model.osft_params:
             svd_module = model.osft_params[safe_name]
 
-            # Broadcast U_low, S_low, V_low
-            dist.broadcast(svd_module.U_low, src=src_rank)
-            dist.broadcast(svd_module.S_low, src=src_rank)
-            dist.broadcast(svd_module.V_low, src=src_rank)
+            # Broadcast U_low, S_low, V_low using device-aware broadcasting
+            _broadcast_tensor_device_aware(svd_module.U_low, src_rank)
+            _broadcast_tensor_device_aware(svd_module.S_low, src_rank)
+            _broadcast_tensor_device_aware(svd_module.V_low, src_rank)
         else:
             raise AttributeError(f"Warning: OSFT module {safe_name} not found in model.osft_params")
 
@@ -597,6 +656,328 @@ def auto_generate_target_osft_config(
     return config
 
 
+def _filter_osft_parameters(kwargs: dict, filter_set: set[str]) -> dict:
+    """
+    Filter out OSFT-specific parameters using the specified filter set.
+    
+    Args:
+        kwargs: Dictionary of keyword arguments
+        filter_set: Set of parameter names to filter out
+        
+    Returns:
+        Filtered dictionary with specified parameters removed
+    """
+    return {k: v for k, v in kwargs.items() if k not in filter_set}
+
+
+def _extract_osft_class_kwargs(kwargs: dict) -> tuple[dict, dict]:
+    """
+    Separate OSFT class-specific kwargs from other kwargs.
+    
+    Args:
+        kwargs: Full kwargs dictionary
+        
+    Returns:
+        Tuple of (osft_class_kwargs, filtered_kwargs)
+    """
+    osft_class_kwargs = {k: v for k, v in kwargs.items() if k in OSFT_CLASS_PARAMS}
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k not in OSFT_CLASS_PARAMS}
+    return osft_class_kwargs, filtered_kwargs
+
+
+
+def _load_gpt_oss_model_memory_efficient(
+    actual_osft_cls,
+    pretrained_model_name_or_path: str,
+    model_args: tuple,
+    base_kwargs: dict,
+    init_cfg: dict,
+    osft_class_kwargs: dict,
+    osft_memory_efficient_init: bool = False
+):
+    """
+    Memory-efficient loading for GPT-OSS models to avoid CUDA OOM.
+    
+    Args:
+        actual_osft_cls: The OSFT model class to instantiate
+        pretrained_model_name_or_path: Model path or name
+        model_args: Positional arguments for model loading
+        base_kwargs: Base model kwargs (already filtered)
+        init_cfg: OSFT configuration
+        osft_class_kwargs: OSFT class-specific parameters
+        osft_memory_efficient_init: Whether to use memory-efficient SVD initialization
+        
+    Returns:
+        Loaded OSFT model
+    """
+    # Get the base model class from the OSFT class inheritance chain
+    base_model_class = None
+    for base in actual_osft_cls.__mro__:
+        if hasattr(base, 'from_pretrained') and base != actual_osft_cls and 'WithOSFT' not in base.__name__:
+            base_model_class = base
+            break
+    
+    if base_model_class is None:
+        raise ValueError(f"Could not find base model class in inheritance chain of {actual_osft_cls}")
+    
+    log_rank_0(f"🎯 Using base model class: {base_model_class.__name__}")
+    log_rank_0("🧠 Using memory-efficient loading to avoid CUDA OOM")
+    
+    # Remove additional OSFT parameters before calling base model's from_pretrained
+    final_base_kwargs = _filter_osft_parameters(base_kwargs, OSFT_BASE_MODEL_FILTERED_PARAMS)
+    
+    # Force CPU loading and lower precision to minimize memory usage
+    final_base_kwargs['torch_dtype'] = torch.bfloat16
+    final_base_kwargs['device_map'] = 'cpu'
+    
+    # Load base model to CPU only and extract what we need immediately
+    with torch.no_grad():
+        log_rank_0("📥 Loading base model to CPU...")
+        base_model = base_model_class.from_pretrained(
+            pretrained_model_name_or_path,
+            *model_args,
+            **final_base_kwargs,
+        )
+        
+        # Extract config and state dict immediately
+        config = base_model.config
+        state_dict = base_model.state_dict()
+        
+        # Delete base model immediately to free memory
+        del base_model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        log_rank_0("🗑️ Base model deleted, memory cleared")
+    
+    # Create OSFT model with extracted config
+    log_rank_0("🔧 Creating OSFT model...")
+    model = actual_osft_cls(
+        config=config,
+        osft_config=init_cfg,
+        initialize_osft=False,
+        upcast_dtype=osft_class_kwargs.get('upcast_dtype', torch.float32),
+        output_dtype=osft_class_kwargs.get('output_dtype', None),
+        osft_memory_efficient_init=osft_memory_efficient_init
+    )
+    
+    # Load state dict into OSFT model
+    log_rank_0("📋 Loading state dict into OSFT model...")
+    model.load_state_dict(state_dict, strict=False)
+    
+    # Clear state dict memory
+    del state_dict
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    log_rank_0("✅ OSFT model created successfully with memory optimization")
+    
+    return model
+
+
+def _load_gpt_oss_model(
+    cls,
+    pretrained_model_name_or_path: str,
+    model_args: tuple,
+    kwargs: dict,
+    init_cfg: dict,
+    osft_memory_efficient_init: bool = False
+):
+    """
+    Load GPT-OSS model with OSFT support using parameter filtering and memory optimization.
+    
+    Args:
+        cls: The OSFT model class
+        pretrained_model_name_or_path: Model path or name
+        model_args: Positional arguments
+        kwargs: All keyword arguments
+        init_cfg: OSFT configuration
+        osft_memory_efficient_init: Whether to use memory-efficient SVD initialization
+        
+    Returns:
+        Loaded OSFT model
+    """
+    log_rank_0("🎯 Detected GPT-OSS model - using standard OSFT loading with parameter filtering")
+    
+    # Step 1: Filter parameters and extract OSFT class-specific kwargs
+    osft_class_kwargs, filtered_kwargs = _extract_osft_class_kwargs(kwargs)
+    base_kwargs = _filter_osft_parameters(filtered_kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
+    
+    # Step 2: Load the base GPT-OSS model first to get the actual model class
+    from transformers import AutoModelForCausalLM
+    tmp_model = AutoModelForCausalLM.from_pretrained(
+        pretrained_model_name_or_path,
+        *model_args,
+        **base_kwargs,
+    )
+    
+    # Step 3: Create OSFT class from the actual model class (e.g., GptOssForCausalLM)
+    actual_osft_cls = create_osft_model_class(tmp_model.__class__)
+    del tmp_model
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    # Step 4: Use memory-efficient loading
+    return _load_gpt_oss_model_memory_efficient(
+        actual_osft_cls,
+        pretrained_model_name_or_path,
+        model_args,
+        base_kwargs,
+        init_cfg,
+        osft_class_kwargs,
+        osft_memory_efficient_init
+    )
+
+
+def _build_osft_kwargs(osft_rank_ratio, osft_target_patterns):
+    """
+    Build OSFT kwargs from parameters, eliminating duplication.
+    
+    Args:
+        osft_rank_ratio: Rank ratio parameter
+        osft_target_patterns: Target patterns parameter
+        
+    Returns:
+        Dictionary of OSFT kwargs
+    """
+    osft_kwargs = {}
+    if osft_rank_ratio:
+        osft_kwargs["rank_ratio"] = osft_rank_ratio
+    if osft_target_patterns:
+        osft_kwargs["target_patterns"] = osft_target_patterns
+    return osft_kwargs
+
+
+def _configure_osft_attributes(model, osft_upcast_dtype, osft_output_dtype):
+    """
+    Set OSFT dtype attributes on model, eliminating duplication.
+    
+    Args:
+        model: The OSFT model to configure
+        osft_upcast_dtype: Upcast dtype for computations
+        osft_output_dtype: Output dtype for results
+    """
+    model.upcast_dtype = osft_upcast_dtype
+    if osft_output_dtype:
+        model.output_dtype = osft_output_dtype
+
+
+def _initialize_osft_with_distribution(model):
+    """
+    Initialize OSFT using appropriate method based on distributed setup.
+    
+    Args:
+        model: The OSFT model to initialize
+        
+    Returns:
+        The initialized model
+    """
+    import torch.distributed as dist
+    
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        # Simple cases: non-distributed or single process
+        model.reinitialize_osft(decompose_existing_weights=True)
+    else:
+        # Distributed SVD computation across all ranks
+        log_rank_0("🚀 Computing distributed OSFT decomposition across all ranks")
+        world_size = dist.get_world_size()
+        log_rank_0(f"Distributing OSFT work across {world_size} ranks")
+        model.reinitialize_osft_distributed()
+        log_rank_0("✅ Distributed OSFT decomposition complete")
+    
+    torch.cuda.empty_cache()
+    return model
+
+
+def _setup_memory_management(model, rank):
+    """
+    Configure memory-efficient GPU placement for the models.
+    
+    Args:
+        model: The OSFT model
+        rank: Current process rank
+    """
+    log_rank_0("🧠 Keeping the model on CPU for ultra-memory-efficient OSFT initialization")
+    model._target_device = torch.device("cuda", rank)
+
+
+def setup_osft_model(
+    model_class,
+    base_model_args: dict,
+    tokenizer,
+    is_gpt_oss: bool,
+    rank: int,
+    osft_rank_ratio=None,
+    osft_target_patterns=None,
+    osft_upcast_dtype=torch.float32,
+    osft_output_dtype=None,
+    osft_memory_efficient_init: bool = False,
+):
+    """
+    High-level function to set up an OSFT model with all necessary configuration.
+    
+    This function handles both GPT-OSS and standard model paths, eliminating
+    duplication and centralizing all OSFT-specific logic.
+    
+    Args:
+        model_class: The base model class to use
+        base_model_args: Arguments for model loading
+        tokenizer: Tokenizer for model alignment
+        is_gpt_oss: Whether this is a GPT-OSS model
+        rank: Current process rank
+        osft_rank_ratio: Rank ratio for OSFT decomposition
+        osft_target_patterns: Target patterns for OSFT
+        osft_upcast_dtype: Upcast dtype for OSFT computations
+        osft_output_dtype: Output dtype for OSFT results
+        osft_memory_efficient_init: Whether to use memory-efficient SVD initialization
+        
+    Returns:
+        Fully configured and initialized OSFT model
+    """
+    from mini_trainer.setup_model_for_training import align_model_and_tokenizer
+    
+    osft_kwargs = _build_osft_kwargs(osft_rank_ratio, osft_target_patterns)
+    
+    if is_gpt_oss:
+        # GPT-OSS: Direct OSFT model loading with parameter filtering handled internally
+        osft_cls = create_osft_model_class(model_class)
+        model: OSFTModel = osft_cls.from_pretrained(
+            **base_model_args,
+            initialize_osft=False,
+            osft_memory_efficient_init=osft_memory_efficient_init,
+            **osft_kwargs,
+        )
+        model = align_model_and_tokenizer(model, tokenizer)
+        
+        # Configure memory-efficient GPU placement for GPT-OSS
+        _setup_memory_management(model, rank)
+    else:
+        # Standard models: Load base model first, then create OSFT class
+        tmp = model_class.from_pretrained(**base_model_args)
+        tmp = align_model_and_tokenizer(tmp, tokenizer)
+        osft_cls = create_osft_model_class(tmp.__class__)
+        cfg = tmp.config
+        del tmp
+        torch.cuda.empty_cache()
+        
+        model: OSFTModel = osft_cls.from_pretrained(
+            **base_model_args,
+            config=cfg,
+            initialize_osft=False,
+            osft_memory_efficient_init=osft_memory_efficient_init,
+            **osft_kwargs,
+        )
+        model = align_model_and_tokenizer(model, tokenizer)
+        
+        # Move standard models to GPU immediately
+        device = torch.device("cuda", rank)
+        model = model.to(device)
+    
+    # Set OSFT dtype attributes (common for both paths)
+    _configure_osft_attributes(model, osft_upcast_dtype, osft_output_dtype)
+    
+    # Initialize OSFT decomposition
+    return _initialize_osft_with_distribution(model)
+
+
 def create_osft_model_class(base_cls) -> type[OSFTModel]:
     """
     Dynamically creates a subclass of the given `base_cls` that replaces selected linear weights
@@ -623,9 +1004,17 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             initialize_osft=True,
             upcast_dtype: torch.dtype = torch.float32,
             output_dtype: torch.dtype | None = None,
+            osft_memory_efficient_init: bool = False,
             **kwargs,
         ):
-            super().__init__(config, **kwargs)
+            # Filter out OSFT-specific parameters for GPT-OSS compatibility
+            is_gpt_oss = getattr(config, 'model_type', None) == 'gpt_oss'
+            if is_gpt_oss:
+                # Remove any OSFT-specific parameters that GPT-OSS constructor won't accept
+                filtered_kwargs = _filter_osft_parameters(kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
+                super().__init__(config, **filtered_kwargs)
+            else:
+                super().__init__(config, **kwargs)
             self.osft_config = osft_config or {}  # Maps parameter names → top_k
             self.name_mapping = {}
             self.osft_params = (
@@ -637,7 +1026,10 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             # we use a higher precision data type for computing to/from SVD components
             # and store in the original data-type by default (usually bf16)
             self.upcast_dtype = upcast_dtype
-            self.output_dtype = output_dtype if output_dtype is not None else self.dtype
+            # Handle cases where the base model doesn't have a dtype attribute
+            default_dtype = getattr(self, 'dtype', torch.bfloat16)
+            self.output_dtype = output_dtype if output_dtype is not None else default_dtype
+            self.osft_memory_efficient_init = osft_memory_efficient_init
 
             if initialize_osft:
                 self._initialize_osft_parameters(decompose_existing_weights=True)
@@ -651,23 +1043,35 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             model_name_or_class=None,
             target_patterns=None,
             rank_ratio=0.5,
+            osft_memory_efficient_init: bool = False,
             **kwargs
         ) -> type[OSFTModel]:
             """Load pretrained weights and automatically initialize OSFT parameters."""
-            # Do not initialize OSFT during the initial construction so we load
-            # the original dense weights first
-            # First load the base model normally without any OSFT kwargs
             init_cfg = osft_config if osft_config is not None else {}
             log_rank_0("\033[33m!!!! Calling from_pretrained !!!!\033[0m")
             initialize_osft = kwargs.pop('initialize_osft', False)
-            model = super(ModelWithOSFT, cls).from_pretrained(
-                pretrained_model_name_or_path,
-                *model_args,
-                osft_config=init_cfg,
-                # we also have initialize_osft as an option in __init__, so disable it here
-                initialize_osft=False,  
-                **kwargs,
-            )
+            
+            # Check if this is a GPT-OSS model
+            try:
+                from transformers import AutoConfig
+                temp_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, trust_remote_code=True)
+                is_gpt_oss = getattr(temp_config, 'model_type', None) == 'gpt_oss'
+            except:
+                is_gpt_oss = False
+            
+            if is_gpt_oss:
+                model = _load_gpt_oss_model(cls, pretrained_model_name_or_path, model_args, kwargs, init_cfg, osft_memory_efficient_init)
+            else:
+                # Standard model loading path
+                base_kwargs = kwargs.copy()
+                base_kwargs['osft_config'] = init_cfg
+                base_kwargs['initialize_osft'] = False
+                
+                model = super(ModelWithOSFT, cls).from_pretrained(
+                    pretrained_model_name_or_path,
+                    *model_args,
+                    **base_kwargs,
+                )
 
             log_rank_0("\033[33m!!!! loading osft config !!!!\033[0m")
             # Auto-generate OSFT config if not provided
@@ -854,18 +1258,61 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                     )
 
             log_rank_0("\033[33m!!!! Initializing OSFT Params!!!!\033[0m")
+            
+            # Check if this is a memory-constrained scenario
+            target_device = getattr(self, '_target_device', None)
+            is_memory_constrained = (target_device is not None and 
+                                   target_device.type == 'cuda' and 
+                                   next(self.parameters()).device.type == 'cpu')
+            
+            if self.osft_memory_efficient_init and is_memory_constrained:
+                log_rank_0(f"🧠 Using ultra-memory-efficient OSFT initialization for device {target_device}")
+            
             for name, param in named_params:
                 # Apply SVD only to 2D matrices in the target config (e.g., q_proj, down_proj, etc.)
                 if is_osft_param(name, param, self.osft_config):
                     top_k = self.osft_config[name]
-                    # log_rank_0(f"[OSFT Init] Decomposing {name} with top_k={top_k}")
-                    svd_dict = create_svd_dict(
-                        param.data,
-                        top_k=top_k,
-                        decompose_existing=decompose_existing_weights,
-                        upcast_dtype=self.upcast_dtype,
-                        output_dtype=self.output_dtype,
-                    )
+                    
+                    if self.osft_memory_efficient_init and is_memory_constrained:
+                        # Memory monitoring before processing
+                        if torch.cuda.is_available():
+                            mem_before = torch.cuda.memory_allocated(target_device) / 1e9
+                            log_rank_0(f"🔄 Processing {name} with incremental GPU usage (top_k={top_k}) - GPU mem: {mem_before:.2f}GB")
+                        
+                        # Memory-efficient processing: move parameter to GPU temporarily for SVD
+                        param_gpu = param.data.to(target_device)
+                        
+                        # Perform SVD on GPU
+                        svd_dict = create_svd_dict(
+                            param_gpu,
+                            top_k=top_k,
+                            decompose_existing=decompose_existing_weights,
+                            upcast_dtype=self.upcast_dtype,
+                            output_dtype=self.output_dtype,
+                        )
+                        
+                        # Move SVD components to target device and clear GPU cache
+                        for key in svd_dict:
+                            if isinstance(svd_dict[key], torch.Tensor):
+                                svd_dict[key] = svd_dict[key].to(target_device)
+                        
+                        # Clear the temporary GPU tensor
+                        del param_gpu
+                        torch.cuda.empty_cache()
+                        
+                        # Memory monitoring after processing
+                        if torch.cuda.is_available():
+                            mem_after = torch.cuda.memory_allocated(target_device) / 1e9
+                            log_rank_0(f"✅ Completed {name} - GPU mem: {mem_after:.2f}GB (freed: {mem_before-mem_after:.2f}GB)")
+                    else:
+                        # Standard processing
+                        svd_dict = create_svd_dict(
+                            param.data,
+                            top_k=top_k,
+                            decompose_existing=decompose_existing_weights,
+                            upcast_dtype=self.upcast_dtype,
+                            output_dtype=self.output_dtype,
+                        )
                     safe_name = name.replace(
                         ".", "_"
                     )  # Required for buffer/module naming in PyTorch

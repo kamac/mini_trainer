@@ -23,28 +23,57 @@ app = Typer(
     pretty_exceptions_short=True   
 )
 
-def validate_fp32_training_state(model, optimizer):
+def validate_training_state(model, optimizer, expected_param_dtype=torch.float32, expected_optimizer_dtype=torch.float32):
     """
-    Validates that the model, optimizer, and gradients are all in FP32.
+    Validates that the model parameters and optimizer state are in their expected dtypes.
+    
+    Args:
+        model: The model to validate
+        optimizer: The optimizer to validate
+        expected_param_dtype: Expected dtype for model parameters and gradients
+        expected_optimizer_dtype: Expected dtype for optimizer state (usually float32 for numerical stability)
     """
     for name, param in model.named_parameters():
-        if param.dtype != torch.float32:
-            raise ValueError(f"Parameter {name} is not in FP32")
-        if param.grad is not None and param.grad.dtype != torch.float32:
-            raise ValueError(f"Gradient {name} is not in FP32")
-    for name, param in optimizer.state.items():
-        for k, v in param.items():
-            if v.dtype != torch.float32: 
-                raise ValueError(f"Optimizer state {name}.{k} is not in FP32")
+        if param.requires_grad and param.dtype != expected_param_dtype:
+            raise ValueError(f"Parameter {name} is not in {expected_param_dtype}")
+        if param.grad is not None and param.grad.dtype != expected_param_dtype:
+            raise ValueError(f"Gradient {name} is not in {expected_param_dtype}")
+    
+    from torch.distributed._tensor.api import DTensor as _DTensor  # works if DTensor is available
+
+    # Check optimizer state tensors - only for trainable parameters
+    for p_obj, state in optimizer.state.items():
+        # Skip optimizer states for frozen parameters (e.g., GPT-OSS router params)
+        if hasattr(p_obj, 'requires_grad') and not p_obj.requires_grad:
+            continue
+            
+        for k, v in state.items():
+            # Skip non-tensor entries and special scalar fields
+            if not (torch.is_tensor(v) or isinstance(v, _DTensor)):
+                continue
+            
+            # Skip specific optimizer state fields that should not match parameter dtype
+            # These include step counters and other scalar-like fields
+            if k in ['step']:
+                continue
+                
+            # Only validate gradient momentum tensors (exp_avg, exp_avg_sq, etc.)
+            # These should match the parameter dtype in mixed precision training
+            v_dtype = v.dtype
+            if v_dtype != expected_optimizer_dtype:
+                raise ValueError(
+                    f"Optimizer state {k} is not in {expected_optimizer_dtype} (got {v_dtype})"
+                )
 
 
-def take_gradient_step(model, optimizer, lr_scheduler):
+def take_gradient_step(model, optimizer, lr_scheduler, expected_dtype=torch.float32):
     """Scales gradients, applies clipping, and takes an optimization step."""
     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
     lr_scheduler.step()
     # keep this here in case mixed precision settings are ever broken
-    validate_fp32_training_state(model, optimizer)
+    # With FSDP2 mixed precision, optimizer state follows the parameter dtype
+    validate_training_state(model, optimizer, expected_param_dtype=expected_dtype, expected_optimizer_dtype=expected_dtype)
     optimizer.zero_grad()
     return grad_norm
 
@@ -67,6 +96,7 @@ def save_model(
     from huggingface_hub import split_torch_state_dict_into_shards
     from transformers import AutoTokenizer
     from safetensors.torch import save_file
+    from mini_trainer.gpt_oss_utils import should_convert_gpt_oss_format, convert_dequantized_to_quantized_format_correct, update_config_for_quantized_format
     # Only on rank 0
     log_rank_0(f"Saving model at {samples_seen} samples")
     start = time.time()
@@ -119,20 +149,31 @@ def save_model(
     
         
     torch.distributed.barrier()
-
-    # Once we have all of our parameters, we need to ensure they're stored in BF16
-    # so checkpoints aren't terrible heavy. We have to do this _after_ `prepare_state_dict_for_save`
-    # has been called so we don't lose fidelity.
-    notified_about_dtype = False
-    cpu_device = torch.device('cpu')
-    for k, v in state_dict.items():
-        if v.dtype != save_dtype:
-            if not notified_about_dtype:
-                log_rank_0(f"⚠️  Warning: Model has tensors with dtype '{v.dtype}', but save dtype was specified as '{save_dtype}'; casting to '{save_dtype}'.")
-                notified_about_dtype = True
-            state_dict[k] = v.to(dtype=save_dtype, device=cpu_device)
- 
+    
+    # Check if this is a GPT-OSS model that needs format conversion
+    is_gpt_oss = should_convert_gpt_oss_format(inner.config)
+    
     if global_rank == 0:
+        # Model format conversion (GPT-OSS vs standard)
+        if is_gpt_oss:
+            log_rank_0("🔧 Converting GPT-OSS parameters to quantized format for compatibility")
+            # Convert state dict on GPU, then move to CPU
+            state_dict = convert_dequantized_to_quantized_format_correct(state_dict)
+        else:
+            # Once we have all of our parameters, we need to ensure they're stored in BF16
+            # so checkpoints aren't terrible heavy. We have to do this _after_ `prepare_state_dict_for_save`
+            # has been called so we don't lose fidelity.
+            notified_about_dtype = False
+            cpu_device = torch.device('cpu')
+            # Standard conversion to bf16 and CPU
+            for k, v in state_dict.items():
+                if v.dtype != save_dtype:
+                    if not notified_about_dtype:
+                        log_rank_0(f"⚠️  Warning: Found tensor {k} with dtype {v.dtype}, casting to {save_dtype}")
+                        notified_about_dtype = True
+                    state_dict[k] = v.to(dtype=save_dtype, device=cpu_device)
+        
+        # All saving operations
         pattern = "model{suffix}.safetensors"
         index_name = "model.safetensors.index.json"
         
@@ -153,6 +194,12 @@ def save_model(
                 json.dump(index, f, indent=2, sort_keys=True)
         # Save config and tokenizer
         inner.config.to_json_file(os.path.join(save_directory, "config.json"))
+        
+        # For GPT-OSS models, update config with proper quantization settings
+        if is_gpt_oss:
+            config_file = os.path.join(save_directory, "config.json")
+            update_config_for_quantized_format(config_file)
+        
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         tokenizer.save_pretrained(save_directory)
 
@@ -305,6 +352,7 @@ def train(
         max_tokens: int = 0,
         checkpoint_at_epoch: bool = False,
         save_final_checkpoint: bool = False,
+        train_dtype: torch.dtype = torch.float32,
     ):
     """
     Runs the model training loop.
@@ -398,7 +446,15 @@ def train(
 
                 # torch.distributed.breakpoint()
                 output = model(**model_inputs)
-                loss = output.loss.float().sum() 
+                
+                # GPT-OSS: add auxiliary loss if present, otherwise use standard loss
+                if hasattr(output, 'aux_loss') and output.aux_loss is not None:
+                    # GPT-OSS model: add auxiliary loss to main loss
+                    loss = output.loss.float().sum() + output.aux_loss.float()
+                else:
+                    # Standard model: use existing loss computation
+                    loss = output.loss.float().sum()
+                
                 loss_metrics = loss.detach().item()
                 '''multiply by world_size to account for the fact that fsdp takes the mean of the gradients across the world_size'''
                 '''the loss is a sum of all cross entropy losses for all tokens in the batch, we divide by batch_num_loss_counted_tokens to get the average loss per token'''
@@ -423,7 +479,7 @@ def train(
             bm = batch_totals.totals
             total_samples_accumulated += bm['num_samples']
             total_tokens_processed += batch_num_loss_counted_tokens  # Track tokens for TOKEN mode
-            grad_norm = take_gradient_step(model, optimizer, lr_scheduler)
+            grad_norm = take_gradient_step(model, optimizer, lr_scheduler, expected_dtype=train_dtype)
 
             # Log only on the main local rank
             if is_local_main_process:
@@ -582,6 +638,7 @@ def main(
     )] = None,
     osft_upcast_dtype: Annotated[str | None, Option(help="Upcast dtype for OSFT computations. Can be 'float16', 'bfloat16', 'float32', etc.")] = "float32",
     osft_output_dtype: Annotated[str | None, Option(help="Output dtype for OSFT. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc.")] = None,
+    osft_memory_efficient_init: Annotated[bool, Option(help="Enable memory-efficient OSFT initialization (useful for large models and GPT-OSS)")] = False,
 
     output_dir: Annotated[str, Option(help="Directory to save checkpoints and logs (required)")] = ...,
     min_samples_per_checkpoint: Annotated[int | None, Option(help="Minimum number of samples processed before saving a checkpoint (required)")] = None,
@@ -594,6 +651,7 @@ def main(
     checkpoint_at_epoch: Annotated[bool, Option(help="Whether to save checkpoints at the end of each epoch")] = False,
     save_final_checkpoint: Annotated[bool, Option(help="Whether to save a final checkpoint when training ends")] = False,
     save_dtype: Annotated[str | None, Option(help="Dtype to save the model in. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc.")] = None,
+    train_dtype: Annotated[str, Option(help="Dtype for training computations. Defaults to 'float32'. Can be 'float16', 'bfloat16', 'float32', etc.")] = "float32",
 ):
     
     init_distributed_environment()
@@ -613,6 +671,7 @@ def main(
     # Convert string dtypes to torch dtypes
     osft_upcast_dtype_torch = parse_dtype(osft_upcast_dtype)
     osft_output_dtype_torch = parse_dtype(osft_output_dtype)
+    train_dtype_torch = parse_dtype(train_dtype)
     
     # Log parameters only on rank 0
     local_rank = int(os.getenv("LOCAL_RANK", 0))
@@ -635,6 +694,7 @@ def main(
             "osft_target_patterns": osft_target_patterns,
             "osft_upcast_dtype": osft_upcast_dtype,
             "osft_output_dtype": osft_output_dtype,
+            "osft_memory_efficient_init": osft_memory_efficient_init,
             "output_dir": output_dir,
             "min_samples_per_checkpoint": min_samples_per_checkpoint,
             "save_dtype": save_dtype,
@@ -691,6 +751,7 @@ def main(
     model = setup_model(
         model_name_or_path=model_name_or_path,
         save_dtype=save_dtype,
+        train_dtype=train_dtype_torch,
         use_liger_kernels=use_liger_kernels,
         osft=osft,
         local_rank=local_rank,
@@ -698,6 +759,7 @@ def main(
         osft_target_patterns=osft_target_patterns,
         osft_upcast_dtype=osft_upcast_dtype_torch,
         osft_output_dtype=osft_output_dtype_torch,
+        osft_memory_efficient_init=osft_memory_efficient_init,
     )
     model, optimizer, lr_scheduler = setup_training_components(
         model=model,
@@ -706,6 +768,7 @@ def main(
         lr_scheduler=lr_scheduler,
         num_training_steps=num_training_steps,
         scheduler_kwargs=scheduler_kwargs_dict,
+        train_dtype=train_dtype_torch,
     )
     
     train(
@@ -721,7 +784,8 @@ def main(
         max_steps=max_steps,
         max_tokens=max_tokens,
         checkpoint_at_epoch=checkpoint_at_epoch,
-        save_final_checkpoint=save_final_checkpoint
+        save_final_checkpoint=save_final_checkpoint,
+        train_dtype=train_dtype_torch
     )
     
 if __name__ == "__main__":
