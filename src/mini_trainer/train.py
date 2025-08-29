@@ -629,7 +629,6 @@ def main(
         output_dir=output_dir,
         min_samples_per_checkpoint=min_samples_per_checkpoint,
         model_name_or_path=model_name_or_path,
-        save_dtype=save_dtype,
         training_mode=training_mode,
         max_epochs=max_epochs,
         max_steps=max_steps,
