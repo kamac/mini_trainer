@@ -194,7 +194,7 @@ class TestSetupModel:
                 model_name_or_path="meta-llama/Llama-2-7b",
                 use_liger_kernels=False,
                 osft=False,
-                rank=0
+                local_rank=0
             )
         
         assert result == mock_model
@@ -353,7 +353,7 @@ class TestIntegration:
                 model_name_or_path="test/model",
                 use_liger_kernels=False,
                 osft=False,
-                rank=0
+                local_rank=0
             )
             
             # Setup training components

@@ -36,7 +36,7 @@ def load_original_model(model_name_or_path, use_liger_kernels=False):
         model_name_or_path=model_name_or_path,
         use_liger_kernels=use_liger_kernels,
         osft=False,  # No OSFT
-        rank=rank,
+        local_rank=rank,
     )
     return original_model
 
@@ -57,7 +57,7 @@ def load_osft_model(model_name_or_path, use_liger_kernels=False):
         model_name_or_path=model_name_or_path,
         use_liger_kernels=use_liger_kernels,
         osft=True,  # Enable OSFT
-        rank=rank,
+        local_rank=rank,
         upcast_dtype=torch.float64,  # Use float64 for better numerical stability
         output_dtype=torch.float64,  # Maintain precision in output
     )

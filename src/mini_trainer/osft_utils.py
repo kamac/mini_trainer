@@ -13,7 +13,10 @@ from mini_trainer.utils import log_rank_0, check_distributed_is_synchronized
 import os
 
 # Memory optimization constants
-OSFT_CACHE_CLEAR_INTERVAL = os.getenv('OSFT_CACHE_CLEAR_INTERVAL', 5)  # Clear GPU cache every N parameters during matrix reconstruction
+OSFT_CACHE_CLEAR_INTERVAL = int(os.getenv(
+    "OSFT_CACHE_CLEAR_INTERVAL", 5
+))  # Clear GPU cache every N parameters during matrix reconstruction
+
 
 class SVDDictBase(t.TypedDict):
     U_high: torch.Tensor
@@ -384,8 +387,8 @@ def project_gradient_to_orthogonal_space(svd_dict: SVDDecompositionDict):
         local_dU = getattr(dU, "to_local", lambda: dU)()
         # Handle sharded tensors in distributed training
         if local_U_high.size(0) != local_dU.size(0):
-            rank = torch.distributed.get_rank()
-            start = rank * local_dU.size(0)
+            global_rank = torch.distributed.get_rank()
+            start = global_rank * local_dU.size(0)
             end = start + local_dU.size(0)
             local_U_high = local_U_high[start:end]
         
@@ -406,8 +409,8 @@ def project_gradient_to_orthogonal_space(svd_dict: SVDDecompositionDict):
         local_V_high = getattr(V_high, "to_local", lambda: V_high)()
         local_dV = getattr(dV, "to_local", lambda: dV)()
         if local_V_high.size(1) != local_dV.size(1):
-            rank = torch.distributed.get_rank()
-            start = rank * local_dV.size(1)
+            global_rank = torch.distributed.get_rank()
+            start = global_rank * local_dV.size(1)
             end = start + local_dV.size(1)
             local_V_high = local_V_high[:, start:end]
         
@@ -718,7 +721,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                 return
 
             world_size = torch.distributed.get_world_size()
-            rank = torch.distributed.get_rank()
+            global_rank = torch.distributed.get_rank()
 
             # Step 1: Determine which parameters will be decomposed
             target_params = get_osft_target_parameters(self, self.osft_config)
@@ -778,7 +781,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                 mod._parameters.pop(attr, None)
 
             # Step 4: Each rank computes SVD for its assigned parameters
-            assigned_params = assignments[rank]
+            assigned_params = assignments[global_rank]
             if assigned_params:
                 self._initialize_osft_parameters(
                     decompose_existing_weights=True, assigned_params=assigned_params
@@ -826,6 +829,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                 assigned_params (list, optional):
                     List of (name, param) tuples to process. If None, processes all parameters.
             """
+            local_rank = int(os.getenv("LOCAL_RANK", 0))
 
             # If assigned_params is provided, only process those parameters
             if assigned_params is not None:
@@ -836,11 +840,11 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             # Show progress bar only on the rank doing the work
             if assigned_params is not None and len(assigned_params) > 0:
                 if torch.distributed.is_initialized():
-                    rank = torch.distributed.get_rank()
+                    global_rank = torch.distributed.get_rank()
                     named_params = tqdm(
                         named_params,
                         total=len(named_params),
-                        desc=f"[OSFT Init Rank {rank}] Decomposing params",
+                        desc=f"[OSFT Init Rank {global_rank}, Local Rank {local_rank}] Decomposing params",
                     )
                 else:
                     named_params = tqdm(
@@ -1067,8 +1071,14 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             log_rank_0("Reconstructing OSFT weights for checkpoint saving...")
             
             # Process parameters one at a time to minimize peak memory usage
-            from tqdm import tqdm
-            for i, (orig, safe) in enumerate(tqdm(self.name_mapping.items(), desc="Reconstructing OSFT weights, this may take a while...", disable=torch.distributed.get_rank() != 0)):
+            main_local_rank = int(os.getenv("LOCAL_RANK", 0))
+            for i, (orig, safe) in enumerate(
+                tqdm(
+                    self.name_mapping.items(),
+                    desc="Reconstructing OSFT weights, this may take a while...",
+                    disable=main_local_rank != 0,
+                )
+            ):
                 # Extract SVD components
                 U_high = state_dict.pop(f"{safe}_U_high")
                 S_high = state_dict.pop(f"{safe}_S_high")

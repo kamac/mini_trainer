@@ -258,7 +258,7 @@ class TestOSFTModelDtypeIntegration:
         result = setup_model(
             model_name_or_path="test-model",
             osft=True,
-            rank=0,
+            local_rank=0,
             osft_upcast_dtype=torch.float32,
             osft_output_dtype=torch.bfloat16,
             osft_rank_ratio=0.5

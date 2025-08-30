@@ -800,7 +800,7 @@ class TestSetupModelIntegration:
         # Call setup_model with OSFT params
         model = setup_model(
             osft=True,
-            rank=0,
+            local_rank=0,
             osft_rank_ratio=0.75,
             osft_target_patterns=["custom.layer1", "custom.layer2"],
             model_name_or_path="test-model"

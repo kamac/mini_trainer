@@ -2,7 +2,7 @@ import time
 import os
 from pathlib import Path
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 from typer import Typer, Option
 
@@ -13,8 +13,10 @@ import torch.distributed as dist
 from mini_trainer.batch_metrics import BatchMetrics
 from mini_trainer.sampler import get_data_loader
 from mini_trainer.setup_model_for_training import setup_model, setup_training_components
-from mini_trainer.utils import init_distributed_environment, log_rank_0, setup_logger
+from mini_trainer.utils import init_distributed_environment, log_rank_0, setup_logger, get_node_rank
 from mini_trainer.training_types import TrainingMode
+
+SaveType = Literal["min_samples", "epoch", "final"]
 
 app = Typer(
     pretty_exceptions_show_locals=False,  # Hide local variables in tracebacks
@@ -68,7 +70,7 @@ def save_model(
     # Only on rank 0
     log_rank_0(f"Saving model at {samples_seen} samples")
     start = time.time()
-    rank = torch.distributed.get_rank()
+    global_rank = torch.distributed.get_rank()
     save_directory = Path(output_dir) / "hf_format" / f"samples_{samples_seen}"
     os.makedirs(save_directory, exist_ok=True)
     
@@ -94,10 +96,27 @@ def save_model(
     # by now the `torch_dtype` attribute has been set to some value
     save_dtype = inner.config.torch_dtype  
 
-    # Unfortunately this process takes quite a bit on the CPU.
-    if rank == 0:
+    # NOTE(osilkin): This save function could be further optimized for quicker checkpoints:
+    # 
+    # FSDP2 provides a distributed checkpoint API, which allows all shards to
+    # save their respective format, which can be post-processed afterwards
+    # to recover the model and optionally the optimizer states.
+    # 
+    # However; switching to this format would require:
+    # 1.) Converting checkpoints into HF format after training completes
+    # 2.) All nodes having access to the same write location, which is also synchronized for us
+    #     to actually export the checkpoints properly.
+
+    # Unfortunately this process takes quite a bit on the CPU. (~5 mins)
+    if global_rank == 0:
+        # only the main global process saves
         if hasattr(inner, "prepare_state_dict_for_save"):
             state_dict = inner.prepare_state_dict_for_save(state_dict)
+    
+    # This process takes a while, so worker nodes should print when this is happening
+    if get_node_rank() != 0 and hasattr(inner, "prepare_state_dict_for_save"):
+        log_rank_0("Model checkpoint is being prepared on the main process of the master node. Please wait...")
+    
         
     torch.distributed.barrier()
 
@@ -109,11 +128,11 @@ def save_model(
     for k, v in state_dict.items():
         if v.dtype != save_dtype:
             if not notified_about_dtype:
-                log_rank_0(f"⚠️  Warning: Found tensor {k} with dtype {v.dtype}, casting to {save_dtype}")
+                log_rank_0(f"⚠️  Warning: Model has tensors with dtype '{v.dtype}', but save dtype was specified as '{save_dtype}'; casting to '{save_dtype}'.")
                 notified_about_dtype = True
             state_dict[k] = v.to(dtype=save_dtype, device=cpu_device)
  
-    if rank == 0:
+    if global_rank == 0:
         pattern = "model{suffix}.safetensors"
         index_name = "model.safetensors.index.json"
         
@@ -136,10 +155,13 @@ def save_model(
         inner.config.to_json_file(os.path.join(save_directory, "config.json"))
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         tokenizer.save_pretrained(save_directory)
-        log_rank_0(f"✅ Saved model at {samples_seen} samples in {time.time() - start:.2f} seconds")
-    
+
+    if get_node_rank() != 0:
+        log_rank_0("Model checkpoint is being saved on the main process of the master node. Please wait...")
+
     log_rank_0("")
     torch.distributed.barrier()
+    log_rank_0(f"✅ Saved model at {samples_seen} samples in {time.time() - start:.2f} seconds")
 
 def reached_stop_condition(
     training_mode: TrainingMode, 
@@ -240,6 +262,32 @@ def validate_training_mode(
     elif training_mode == TrainingMode.TOKEN and max_tokens <= 0:
         raise ValueError("TOKEN training mode requires max_tokens > 0")
 
+def should_save_checkpoint(
+    save_type: SaveType,
+    accumulated_samples: int,
+    last_saved_samples: int,
+    min_samples_per_checkpoint: int | None = None,
+    end_of_epoch: bool = False,
+    end_of_training: bool = False,
+) -> bool:
+    """
+    Utility function to consolidate the logic used when deciding if 
+    a checkpoint should be saved. 
+    
+    This also prevents duplicate checkpointing from happening, which is particularly
+    imoprtant for OSFT, since checkpointing is an expensive operation.
+    """
+    match save_type:
+        case "min_samples":
+            return min_samples_per_checkpoint is not None and accumulated_samples > last_saved_samples
+        case "epoch":
+            # have we processed any new information since the last checkpoint?
+            return end_of_epoch and accumulated_samples > last_saved_samples  
+        case "final":
+            return end_of_training and accumulated_samples > last_saved_samples
+        case _:
+            raise ValueError(f"Unknown save type: {save_type}")
+
 
 def train(
         model: torch.nn.Module, 
@@ -298,16 +346,21 @@ def train(
     model.train()
 
     # control args 
-    metric_logger = AsyncStructuredLogger(output_dir + f"/training_metrics_{os.environ.get('RANK')}.jsonl")
     world_size = int(os.environ["WORLD_SIZE"])
-    is_main_process = dist.get_rank() == 0
+    is_local_main_process = int(os.getenv("LOCAL_RANK", 0)) == 0
+    metric_logger = AsyncStructuredLogger(output_dir + f"/training_metrics_{get_node_rank()}.jsonl")
 
     # initialize variables
     batch_totals = BatchMetrics()
     step = 0
     total_samples_accumulated = 0
     total_tokens_processed = 0  # Track total loss-counted tokens for TOKEN mode
-    last_saved_samples = 0
+    
+    # we keep 2 different values to track the # of last saved samples, so that
+    # frequency-based saving can still happen, but the other methods have a way
+    # of tracking what's actually been saved
+    last_frequency_saved_samples = 0
+    last_saved_samples = 0 
     device = next(model.parameters()).device
     epoch = 0
 
@@ -370,7 +423,8 @@ def train(
             total_tokens_processed += batch_num_loss_counted_tokens  # Track tokens for TOKEN mode
             grad_norm = take_gradient_step(model, optimizer, lr_scheduler)
 
-            if is_main_process:
+            # Log only on the main local rank
+            if is_local_main_process:
                 batch_time = time.time() - batch_start_time
                 batch_metrics = {
                         "step": step,
@@ -398,8 +452,17 @@ def train(
             torch.distributed.barrier()
             
             # sample-based saving, keep in the inner loop
-            if min_samples_per_checkpoint is not None and total_samples_accumulated - last_saved_samples >= min_samples_per_checkpoint:
+            if should_save_checkpoint(
+                save_type="min_samples",
+                accumulated_samples=total_samples_accumulated,
+                last_saved_samples=last_frequency_saved_samples,
+                min_samples_per_checkpoint=min_samples_per_checkpoint
+            ):
                 save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
+                # update this value for frequency-based saving
+                last_frequency_saved_samples = total_samples_accumulated
+                
+                # track this save so others (e.g. epoch, final) don't duplicate save
                 last_saved_samples = total_samples_accumulated
             
             # Check stopping condition after each step (for STEP and TOKEN modes)
@@ -417,13 +480,31 @@ def train(
         # Increment epoch counter after completing an epoch
         epoch += 1
         
-        # save at the current number of samples seen. Do not record `last_saved_samples`
-        # since this shouldn't interefere with frequency-based saving
         if checkpoint_at_epoch:
-            save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
+            # should save at the end of each epoch
+            if should_save_checkpoint(
+                save_type="epoch",
+                accumulated_samples=total_samples_accumulated,
+                last_saved_samples=last_saved_samples,
+                end_of_epoch=True
+            ):
+                save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
+                last_saved_samples = total_samples_accumulated
+            else:
+                log_rank_0(f"Skipping checkpoint save at epoch {epoch} because no new samples have been processed since the last checkpoint.")
     
     if save_final_checkpoint:
-        save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
+        # save one last time if we haven't yet
+        if should_save_checkpoint(
+            save_type="final",
+            accumulated_samples=total_samples_accumulated,
+            last_saved_samples=last_saved_samples,
+            end_of_training=True
+        ):
+            save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
+            last_saved_samples = total_samples_accumulated
+        else:
+            log_rank_0(f"Skipping final checkpoint save because no new samples have been processed since the last checkpoint.")
 
 
 def calculate_num_training_steps(
@@ -532,8 +613,11 @@ def main(
     osft_output_dtype_torch = parse_dtype(osft_output_dtype)
     
     # Log parameters only on rank 0
-    rank = dist.get_rank()
-    if rank == 0:
+    local_rank = int(os.getenv("LOCAL_RANK", 0))
+    node_rank = get_node_rank()
+    world_size = torch.distributed.get_world_size()
+    global_rank = torch.distributed.get_rank()
+    if local_rank == 0:
         params = {
             "model_name_or_path": model_name_or_path,
             "data_path": data_path,
@@ -558,8 +642,9 @@ def main(
             "max_tokens": max_tokens,
             "checkpoint_at_epoch": checkpoint_at_epoch,
             "save_final_checkpoint": save_final_checkpoint,
-            "RANK": rank, # Include rank itself, though it will be 0 here
-            "WORLD_SIZE": int(os.environ.get("WORLD_SIZE", 1))
+            "GLOBA_RANK": global_rank,
+            "NODE_RANK": node_rank,
+            "WORLD_SIZE": world_size
         }
         params_path = output_path / "training_params.json"
         with open(params_path, 'w') as f:
@@ -606,7 +691,7 @@ def main(
         save_dtype=save_dtype,
         use_liger_kernels=use_liger_kernels,
         osft=osft,
-        rank=rank,
+        local_rank=local_rank,
         osft_rank_ratio=osft_rank_ratio,
         osft_target_patterns=osft_target_patterns,
         osft_upcast_dtype=osft_upcast_dtype_torch,
