@@ -20,14 +20,16 @@ from mini_trainer.utils import (
 class TestDistributedUtils:
     """Test suite for distributed training utilities."""
     
-    @patch.dict(os.environ, {'LOCAL_RANK': '0'})
+    @patch.dict(os.environ, {'LOCAL_RANK': '0', 'WORLD_SIZE': '1', 'LOCAL_WORLD_SIZE': '1', 'RANK': '0'})
+    @patch('mini_trainer.utils.torch.distributed.get_world_size', return_value=1)
     @patch('mini_trainer.utils.torch.distributed.init_process_group')
     @patch('mini_trainer.utils.torch.cuda.set_device')
     @patch('mini_trainer.utils.check_distributed_is_synchronized')
+    @patch('mini_trainer.utils.check_distributed_is_evenly_configured')
     @patch('mini_trainer.utils.torch.distributed.barrier')
     @patch('mini_trainer.utils.log_rank_0')
-    def test_init_distributed_environment(self, mock_log, mock_barrier, mock_check,
-                                         mock_set_device, mock_init_pg):
+    def test_init_distributed_environment(self, mock_log, mock_barrier, mock_check, mock_check_evenly_configured,
+                                         mock_set_device, mock_init_pg, mock_world_size):
         """Test distributed environment initialization."""
         init_distributed_environment()
         
@@ -46,6 +48,7 @@ class TestDistributedUtils:
         # Check barrier
         mock_barrier.assert_called_once()
     
+    @patch.dict(os.environ, {'LOCAL_RANK': '0'})
     @patch('mini_trainer.utils.dist.get_rank', return_value=0)
     @patch('mini_trainer.utils.dist.get_world_size', return_value=4)
     @patch('mini_trainer.utils.dist.all_reduce')
@@ -63,6 +66,7 @@ class TestDistributedUtils:
         
         mock_all_reduce.assert_called_once()
     
+    @patch.dict(os.environ, {'LOCAL_RANK': '0'})
     @patch('mini_trainer.utils.dist.get_rank', return_value=0)
     @patch('mini_trainer.utils.dist.get_world_size', return_value=4)
     @patch('mini_trainer.utils.dist.all_reduce')

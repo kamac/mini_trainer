@@ -211,7 +211,7 @@ class TestMaxTokensPerRankCollator:
         collator = MaxTokensPerRankCollator(max_tokens_per_rank=1000)
         
         assert collator.max_tokens_per_rank == 1000
-        assert collator.rank == 0
+        assert collator.global_rank == 0
         assert collator.world_size == 2
         assert collator.dummy_sample is not None
     
@@ -547,7 +547,7 @@ class TestGetDataLoader:
         )
         
         assert loader.batch_size == 8
-        assert loader.collate_fn.rank == 1
+        assert loader.collate_fn.global_rank == 1
         assert loader.collate_fn.world_size == 4
         assert loader.collate_fn.dummy_sample == dummy_sample
     
