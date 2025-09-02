@@ -279,7 +279,9 @@ def should_save_checkpoint(
     """
     match save_type:
         case "min_samples":
-            return min_samples_per_checkpoint is not None and accumulated_samples > last_saved_samples
+            if min_samples_per_checkpoint is None:
+                return False
+            return accumulated_samples - last_saved_samples >= min_samples_per_checkpoint
         case "epoch":
             # have we processed any new information since the last checkpoint?
             return end_of_epoch and accumulated_samples > last_saved_samples  
@@ -642,7 +644,7 @@ def main(
             "max_tokens": max_tokens,
             "checkpoint_at_epoch": checkpoint_at_epoch,
             "save_final_checkpoint": save_final_checkpoint,
-            "GLOBA_RANK": global_rank,
+            "GLOBAL_RANK": global_rank,
             "NODE_RANK": node_rank,
             "WORLD_SIZE": world_size
         }
