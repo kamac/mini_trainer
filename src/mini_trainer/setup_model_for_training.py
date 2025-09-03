@@ -20,7 +20,8 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
     # Move model to GPU and disable HuggingFace cache
     if model.device.type != 'cuda':
         # Move the model to the GPU if it's not already there
-        device = torch.device('cuda', dist.get_rank())
+        local_rank = int(os.environ['LOCAL_RANK'])
+        device = torch.device('cuda', local_rank)
         model.to(device)
 
     if hasattr(model, 'config'):
@@ -163,7 +164,7 @@ def get_model_save_dtype(save_dtype: str | torch.dtype | None, model_name_or_pat
 def setup_model(
     model_name_or_path: str,
     osft: bool = False,
-    rank: int = 0,
+    local_rank: int = 0,
     save_dtype: str | torch.dtype | None = None,
     osft_upcast_dtype: torch.dtype = torch.float32,
     osft_output_dtype: torch.dtype | None = None,
@@ -243,7 +244,7 @@ def setup_model(
             model.output_dtype = osft_output_dtype
 
         model = align_model_and_tokenizer(model, tokenizer)
-        device = torch.device("cuda", rank)
+        device = torch.device("cuda", local_rank)
         model = model.to(device)
 
         # NOTE(osilkin): SVD over large models is very expensive, to optimize we handle

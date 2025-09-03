@@ -237,6 +237,7 @@ class TestSaveModel:
         model.module.prepare_state_dict_for_save = MagicMock(side_effect=lambda x: x)
         return model
     
+    @patch.dict(os.environ, {'RANK': '0', 'LOCAL_WORLD_SIZE': '1'})
     @patch('mini_trainer.train.torch.distributed.get_rank', return_value=0)
     @patch('mini_trainer.train.torch.distributed.barrier')
     @patch('torch.distributed.checkpoint.state_dict.get_model_state_dict')
@@ -294,6 +295,7 @@ class TestSaveModel:
         # Check barrier for synchronization
         mock_barrier.assert_called()
     
+    @patch.dict(os.environ, {'RANK': '1', 'LOCAL_WORLD_SIZE': '2'})
     @patch('mini_trainer.train.torch.distributed.get_rank', return_value=1)
     @patch('mini_trainer.utils.get_rank', return_value=1)  # Also patch the utils version
     @patch('mini_trainer.utils.is_initialized', return_value=True)
@@ -317,6 +319,7 @@ class TestSaveModel:
         # Should still get state dict (all ranks do this)
         mock_get_state_dict.assert_called_once()
     
+    @patch.dict(os.environ, {'RANK': '0', 'LOCAL_WORLD_SIZE': '1'})
     @patch('mini_trainer.train.torch.distributed.get_rank', return_value=0)
     @patch('mini_trainer.train.torch.distributed.barrier')
     @patch('torch.distributed.checkpoint.state_dict.get_model_state_dict')

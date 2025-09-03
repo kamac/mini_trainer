@@ -114,6 +114,7 @@ class TestWrapFSDP2:
         
         return model
     
+    @patch.dict(os.environ, {'LOCAL_RANK': '0'})
     @patch('mini_trainer.setup_model_for_training.dist.get_rank', return_value=0)
     @patch('mini_trainer.setup_model_for_training.dist.get_world_size', return_value=2)
     @patch('mini_trainer.setup_model_for_training.init_device_mesh')
@@ -140,6 +141,7 @@ class TestWrapFSDP2:
         # Should fully shard each layer and the model
         assert mock_fully_shard.call_count == 5  # 4 layers + 1 model
     
+    @patch.dict(os.environ, {'LOCAL_RANK': '1'})
     @patch('mini_trainer.setup_model_for_training.dist.get_rank', return_value=1)
     @patch('mini_trainer.setup_model_for_training.dist.get_world_size', return_value=4)
     @patch('mini_trainer.setup_model_for_training.init_device_mesh')
@@ -163,6 +165,7 @@ class TestWrapFSDP2:
         assert to_call.type == 'cuda'
         assert to_call.index == 1
     
+    @patch.dict(os.environ, {'LOCAL_RANK': '0'})
     @patch('mini_trainer.setup_model_for_training.dist.get_rank', return_value=0)
     def test_wrap_fsdp2_no_layers_found(self, mock_rank, mock_model):
         """Test error handling when transformer layers not found."""
@@ -194,7 +197,7 @@ class TestSetupModel:
                 model_name_or_path="meta-llama/Llama-2-7b",
                 use_liger_kernels=False,
                 osft=False,
-                rank=0
+                local_rank=0
             )
         
         assert result == mock_model
@@ -353,7 +356,7 @@ class TestIntegration:
                 model_name_or_path="test/model",
                 use_liger_kernels=False,
                 osft=False,
-                rank=0
+                local_rank=0
             )
             
             # Setup training components

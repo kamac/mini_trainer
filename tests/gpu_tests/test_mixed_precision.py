@@ -100,7 +100,7 @@ class TestMixedPrecisionDtypes:
                 model_name_or_path=str(model_path),
                 use_liger_kernels=False,
                 osft=False,
-                rank=0
+                local_rank=0
             )
             
             # Setup training components (includes FSDP2 wrapping)

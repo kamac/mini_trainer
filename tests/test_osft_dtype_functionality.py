@@ -258,7 +258,7 @@ class TestOSFTModelDtypeIntegration:
         result = setup_model(
             model_name_or_path="test-model",
             osft=True,
-            rank=0,
+            local_rank=0,
             osft_upcast_dtype=torch.float32,
             osft_output_dtype=torch.bfloat16,
             osft_rank_ratio=0.5
@@ -283,6 +283,8 @@ class TestOSFTModelDtypeIntegration:
 class TestOSFTParameterFlow:
     """Test end-to-end parameter flow for dtype parameters."""
     
+    @patch('torch.distributed.get_world_size', return_value=1)
+    @patch('mini_trainer.train.get_node_rank', return_value=0)
     @patch('mini_trainer.train.setup_model')
     @patch('mini_trainer.train.setup_training_components')
     @patch('mini_trainer.train.train')
@@ -290,8 +292,8 @@ class TestOSFTParameterFlow:
     @patch('mini_trainer.train.calculate_num_training_steps')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank')
-    def test_dtype_flow_from_main_to_svd_model(self, mock_get_rank, mock_init_dist, mock_calc_steps,
-                                               mock_data_loader, mock_train_fn, mock_setup_components, mock_setup_model):
+    def test_dtype_flow_from_main_to_svd_model(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader,
+                                               mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test that dtype parameters flow correctly from main to SVD model creation."""
         # Setup mocks
         mock_get_rank.return_value = 0

@@ -221,13 +221,13 @@ class TestOSFTReconstructionFidelity:
         model_without_osft = setup_model(
             model_name_or_path="test-model",
             osft=False,
-            rank=0
+            local_rank=0
         )
         
         model_with_osft = setup_model(
             model_name_or_path="test-model",
             osft=True,
-            rank=0,
+            local_rank=0,
             osft_rank_ratio=0.5
         )
         

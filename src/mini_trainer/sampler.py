@@ -249,8 +249,11 @@ class MaxTokensPerRankCollator:
     """
     def __init__(self, max_tokens_per_rank: int, rank: int=None, world_size: int=None, dummy_sample=None):
         self.max_tokens_per_rank = max_tokens_per_rank
-        self.rank = rank if rank is not None else dist.get_rank()
-        self.world_size = world_size if world_size is not None else dist.get_world_size()
+
+        self.global_rank = rank if rank is not None else dist.get_rank()
+        self.world_size = (
+            world_size if world_size is not None else dist.get_world_size()
+        )
         if dummy_sample is None:
             dummy_sample = {'input_ids': torch.tensor([15, 14, 13, 12, 11], dtype=torch.long),
                             'labels': torch.tensor([-100, -100, -100, -100, -100], dtype=torch.long),
@@ -272,10 +275,14 @@ class MaxTokensPerRankCollator:
         if len(batch_) < len(batch):
             print(f"\033[38;5;196mremoved {len(batch) - len(batch_)} samples from batch because they are longer than the max tokens per gpu\033[0m")
         # Use filtered batch for lengths and loss counts
-        batch_lengths = [sample['len'] for sample in batch_]
-        batch_num_loss_counted_tokens = sum([sample['num_loss_counted_tokens'] for sample in batch_])
-        all_minibatches_indices = batch_lengths_to_minibatches_lpt(batch_lengths, self.max_tokens_per_rank, self.world_size, self.rank)
-        
+        batch_lengths = [sample["len"] for sample in batch_]
+        batch_num_loss_counted_tokens = sum(
+            [sample["num_loss_counted_tokens"] for sample in batch_]
+        )
+        all_minibatches_indices = batch_lengths_to_minibatches_lpt(
+            batch_lengths, self.max_tokens_per_rank, self.world_size, self.global_rank
+        )
+
         all_minibatches = []
         for mb_indices in all_minibatches_indices:
             mb = [batch_[i] if i != -1 else self.dummy_sample for i in mb_indices]
