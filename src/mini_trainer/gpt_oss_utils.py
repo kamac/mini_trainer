@@ -328,9 +328,9 @@ def convert_dequantized_to_quantized_format_correct(state_dict: Dict[str, torch.
     return converted_state_dict
 
 
-def should_convert_gpt_oss_format(model_config) -> bool:
+def is_gpt_oss_model(model_config) -> bool:
     """
-    Determine if we should convert GPT-OSS format during saving.
+    Check if the model config indicates this is a GPT-OSS model.
     """
     return getattr(model_config, 'model_type', None) == 'gpt_oss'
 
@@ -387,7 +387,7 @@ def freeze_gpt_oss_router_params(model) -> bool:
         bool: True if this is a GPT-OSS model and parameters were frozen
     """
     # Check if this is a GPT-OSS model
-    is_gpt_oss = getattr(model.config, 'model_type', None) == 'gpt_oss'
+    is_gpt_oss = is_gpt_oss_model(model.config)
     
     if not is_gpt_oss:
         return False
@@ -406,9 +406,9 @@ def freeze_gpt_oss_router_params(model) -> bool:
     return True
 
 
-def is_gpt_oss_model(tokenizer) -> bool:
+def is_gpt_oss_tokenizer(tokenizer) -> bool:
     """
-    Check if this is a GPT-OSS model based on tokenizer special tokens.
+    Check if this is a GPT-OSS tokenizer based on special tokens.
     
     Args:
         tokenizer: The tokenizer to check

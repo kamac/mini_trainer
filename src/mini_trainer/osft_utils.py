@@ -9,6 +9,7 @@ from typing import Protocol
 from tqdm import tqdm
 
 from mini_trainer.utils import log_rank_0, check_distributed_is_synchronized
+from mini_trainer.gpt_oss_utils import is_gpt_oss_model
 
 import os
 
@@ -887,16 +888,6 @@ def _initialize_osft_with_distribution(model):
     return model
 
 
-def _setup_memory_management(model, rank):
-    """
-    Configure memory-efficient GPU placement for the models.
-    
-    Args:
-        model: The OSFT model
-        rank: Current process rank
-    """
-    log_rank_0("🧠 Keeping the model on CPU for ultra-memory-efficient OSFT initialization")
-    model._target_device = torch.device("cuda", rank)
 
 
 def setup_osft_model(
@@ -947,8 +938,6 @@ def setup_osft_model(
         )
         model = align_model_and_tokenizer(model, tokenizer)
         
-        # Configure memory-efficient GPU placement for GPT-OSS
-        _setup_memory_management(model, rank)
     else:
         # Standard models: Load base model first, then create OSFT class
         tmp = model_class.from_pretrained(**base_model_args)
@@ -1008,7 +997,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             **kwargs,
         ):
             # Filter out OSFT-specific parameters for GPT-OSS compatibility
-            is_gpt_oss = getattr(config, 'model_type', None) == 'gpt_oss'
+            is_gpt_oss = is_gpt_oss_model(config)
             if is_gpt_oss:
                 # Remove any OSFT-specific parameters that GPT-OSS constructor won't accept
                 filtered_kwargs = _filter_osft_parameters(kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
@@ -1055,7 +1044,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             try:
                 from transformers import AutoConfig
                 temp_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, trust_remote_code=True)
-                is_gpt_oss = getattr(temp_config, 'model_type', None) == 'gpt_oss'
+                is_gpt_oss = is_gpt_oss_model(temp_config)
             except:
                 is_gpt_oss = False
             
@@ -1260,10 +1249,10 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             log_rank_0("\033[33m!!!! Initializing OSFT Params!!!!\033[0m")
             
             # Check if this is a memory-constrained scenario
-            target_device = getattr(self, '_target_device', None)
-            is_memory_constrained = (target_device is not None and 
-                                   target_device.type == 'cuda' and 
-                                   next(self.parameters()).device.type == 'cpu')
+            local_rank = int(os.getenv("LOCAL_RANK", 0))
+            target_device = torch.device("cuda", local_rank) if torch.cuda.is_available() else torch.device("cpu")
+            is_memory_constrained = (next(self.parameters()).device.type == 'cpu' and
+                                   target_device.type == 'cuda')
             
             if self.osft_memory_efficient_init and is_memory_constrained:
                 log_rank_0(f"🧠 Using ultra-memory-efficient OSFT initialization for device {target_device}")

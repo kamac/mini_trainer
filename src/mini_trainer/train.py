@@ -96,7 +96,7 @@ def save_model(
     from huggingface_hub import split_torch_state_dict_into_shards
     from transformers import AutoTokenizer
     from safetensors.torch import save_file
-    from mini_trainer.gpt_oss_utils import should_convert_gpt_oss_format, convert_dequantized_to_quantized_format_correct, update_config_for_quantized_format
+    from mini_trainer.gpt_oss_utils import is_gpt_oss_model, convert_dequantized_to_quantized_format_correct
     # Only on rank 0
     log_rank_0(f"Saving model at {samples_seen} samples")
     start = time.time()
@@ -151,7 +151,7 @@ def save_model(
     torch.distributed.barrier()
     
     # Check if this is a GPT-OSS model that needs format conversion
-    is_gpt_oss = should_convert_gpt_oss_format(inner.config)
+    is_gpt_oss = is_gpt_oss_model(inner.config)
     
     if global_rank == 0:
         # Model format conversion (GPT-OSS vs standard)
@@ -193,12 +193,26 @@ def save_model(
             with open(os.path.join(save_directory, index_name), "w") as f:
                 json.dump(index, f, indent=2, sort_keys=True)
         # Save config and tokenizer
-        inner.config.to_json_file(os.path.join(save_directory, "config.json"))
-        
-        # For GPT-OSS models, update config with proper quantization settings
         if is_gpt_oss:
-            config_file = os.path.join(save_directory, "config.json")
-            update_config_for_quantized_format(config_file)
+            # For GPT-OSS models, add quantization config before saving (single write)
+            config_dict = inner.config.to_dict()
+            if 'quantization_config' not in config_dict:
+                config_dict['quantization_config'] = {
+                    "modules_to_not_convert": [
+                        "model.layers.*.self_attn",
+                        "model.layers.*.mlp.router", 
+                        "model.embed_tokens",
+                        "lm_head"
+                    ],
+                    "quant_method": "mxfp4"
+                }
+            # Save the modified config
+            import json
+            with open(os.path.join(save_directory, "config.json"), 'w') as f:
+                json.dump(config_dict, f, indent=2)
+        else:
+            # Standard config save for non-GPT-OSS models
+            inner.config.to_json_file(os.path.join(save_directory, "config.json"))
         
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         tokenizer.save_pretrained(save_directory)

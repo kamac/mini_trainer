@@ -11,15 +11,15 @@ from torch.distributed.device_mesh import init_device_mesh
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from mini_trainer.utils import log_rank_0, patch_target_module
 from mini_trainer.osft_utils import OSFTModel, setup_osft_model
-from mini_trainer.gpt_oss_utils import freeze_gpt_oss_router_params
+from mini_trainer.gpt_oss_utils import freeze_gpt_oss_router_params, is_gpt_oss_model
 
 
 
 # New simple HF-only activation-checkpointing + FSDP2 wrapper
 # This mirrors TorchTitan: checkpoint each block, then shard each block and the full model.
 def wrap_fsdp2(model: torch.nn.Module, train_dtype: torch.dtype = torch.float32) -> torch.nn.Module:
-    # Check if this is a memory-constrained model (GPT-OSS with OSFT)
-    is_memory_constrained = hasattr(model, '_target_device')
+    # Check if this is a memory-constrained model (OSFT models)
+    is_memory_constrained = hasattr(model, 'osft_config')
     
     # Move model to GPU and disable HuggingFace cache
     if model.device.type != 'cuda':
@@ -199,7 +199,7 @@ def setup_model(
     
     # Get model config to check for GPT-OSS and set appropriate configurations
     model_config = AutoConfig.from_pretrained(model_name_or_path)
-    is_gpt_oss = model_config.model_type == "gpt_oss"
+    is_gpt_oss = is_gpt_oss_model(model_config)
     
     # Set up quantization config for GPT-OSS models
     if is_gpt_oss:

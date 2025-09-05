@@ -6,20 +6,8 @@ import numpy as np
 
 app = typer.Typer()
 
-
-def is_gpt_oss_model(tokenizer):
-    """Check if this is a GPT-OSS model based on tokenizer."""
-    if not tokenizer:
-        return False
-    try:
-        # GPT-OSS models have these special tokens
-        test_tokens = ["<|start|>", "<|channel|>", "<|message|>"]
-        for token in test_tokens:
-            # If any of these tokens can't be encoded, it's not GPT-OSS
-            tokenizer.encode(token, add_special_tokens=False)
-        return True
-    except:
-        return False
+# Import from main codebase instead of duplicating
+from mini_trainer.gpt_oss_utils import is_gpt_oss_tokenizer as is_gpt_oss_model
 
 
 def is_gpt_oss_assistant_channel(pos, original_ids, tokenizer):
