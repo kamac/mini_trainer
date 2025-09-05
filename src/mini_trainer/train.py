@@ -207,7 +207,6 @@ def save_model(
                     "quant_method": "mxfp4"
                 }
             # Save the modified config
-            import json
             with open(os.path.join(save_directory, "config.json"), 'w') as f:
                 json.dump(config_dict, f, indent=2)
         else:

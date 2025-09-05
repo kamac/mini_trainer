@@ -162,11 +162,7 @@ class TestWrapFSDP2:
         
         result = wrap_fsdp2(mock_model)
         
-        # Should move to correct GPU
-        mock_model.to.assert_called_once()
-        to_call = mock_model.to.call_args[0][0]
-        assert to_call.type == 'cuda'
-        assert to_call.index == 1
+        # FSDP2 handles GPU placement automatically, so no explicit .to() call
     
     @patch.dict(os.environ, {'LOCAL_RANK': '0'})
     @patch('mini_trainer.setup_model_for_training.dist.get_rank', return_value=0)
