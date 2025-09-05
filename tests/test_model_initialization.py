@@ -154,8 +154,11 @@ class TestWrapFSDP2:
         mock_init_mesh.return_value = mock_mesh
         mock_checkpoint.side_effect = lambda x, **kwargs: x
         
-        # Model should be moved to correct GPU
+        # Model should be moved to correct GPU (ensure it's not memory-constrained)
         mock_model.device = torch.device('cpu')
+        # Make sure the model doesn't have _target_device (which would make it memory-constrained)
+        if hasattr(mock_model, '_target_device'):
+            delattr(mock_model, '_target_device')
         
         result = wrap_fsdp2(mock_model)
         
@@ -212,7 +215,10 @@ class TestSetupTrainingComponents:
     def mock_model(self):
         """Create a mock model for testing."""
         model = MagicMock()
-        model.parameters = MagicMock(return_value=[MagicMock()])
+        # Create mock parameters with requires_grad=True
+        mock_param = MagicMock()
+        mock_param.requires_grad = True
+        model.parameters = MagicMock(return_value=[mock_param])
         return model
     
     @patch('mini_trainer.setup_model_for_training.wrap_fsdp2')
@@ -224,6 +230,10 @@ class TestSetupTrainingComponents:
                                             mock_adamw, mock_scheduler, mock_wrap, mock_model):
         """Test basic training components setup."""
         mock_wrapped_model = MagicMock()
+        # Set up mock parameters with requires_grad=True for the wrapped model
+        mock_param = MagicMock()
+        mock_param.requires_grad = True
+        mock_wrapped_model.parameters = MagicMock(return_value=[mock_param])
         mock_wrap.return_value = mock_wrapped_model
         
         mock_optimizer = MagicMock()
@@ -248,7 +258,7 @@ class TestSetupTrainingComponents:
         assert lr_scheduler == mock_lr_scheduler
         
         # Check FSDP2 wrapping
-        mock_wrap.assert_called_once_with(mock_model)
+        mock_wrap.assert_called_once_with(mock_model, train_dtype=torch.float32)
         
         # Check optimizer creation
         mock_adamw.assert_called_once_with(
