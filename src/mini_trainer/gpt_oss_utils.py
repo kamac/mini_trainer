@@ -376,7 +376,7 @@ def update_config_for_quantized_format(config_path):
         logger.info(f"Backup saved as {backup_path}")
 
 
-def freeze_gpt_oss_router_params(model) -> bool:
+def freeze_router_params(model) -> bool:
     """
     Freeze router parameters for GPT-OSS models before FSDP setup.
     

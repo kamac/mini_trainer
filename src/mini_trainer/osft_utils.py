@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from mini_trainer.utils import log_rank_0, check_distributed_is_synchronized
 from mini_trainer.gpt_oss_utils import is_gpt_oss_model
+from transformers.models.gpt_oss.modeling_gpt_oss import GptOssForCausalLM
 
 import os
 
@@ -508,7 +509,8 @@ def _broadcast_tensor_device_aware(tensor, src_rank):
     # If tensor is on CPU, we need to move to GPU for NCCL broadcasting
     if tensor.device.type == 'cpu':
         current_rank = dist.get_rank()
-        gpu_device = torch.device('cuda', current_rank)
+        local_rank = int(os.environ.get('LOCAL_RANK', 0))
+        gpu_device = torch.device('cuda', local_rank)
         tensor_gpu = tensor.to(gpu_device)
         
         # Broadcast the GPU tensor
@@ -687,7 +689,7 @@ def _extract_osft_class_kwargs(kwargs: dict) -> tuple[dict, dict]:
 
 
 
-def _load_gpt_oss_model_memory_efficient(
+def _load_model_memory_efficient(
     actual_osft_cls,
     pretrained_model_name_or_path: str,
     model_args: tuple,
@@ -802,22 +804,11 @@ def _load_gpt_oss_model(
     osft_class_kwargs, filtered_kwargs = _extract_osft_class_kwargs(kwargs)
     base_kwargs = _filter_osft_parameters(filtered_kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
     
-    # Step 2: Load the base GPT-OSS model first to get the actual model class
-    from transformers import AutoModelForCausalLM
-    tmp_model = AutoModelForCausalLM.from_pretrained(
-        pretrained_model_name_or_path,
-        *model_args,
-        **base_kwargs,
-    )
+    # Step 2: Create OSFT class from GptOssForCausalLM directly
+    actual_osft_cls = create_osft_model_class(GptOssForCausalLM)
     
-    # Step 3: Create OSFT class from the actual model class (e.g., GptOssForCausalLM)
-    actual_osft_cls = create_osft_model_class(tmp_model.__class__)
-    del tmp_model
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    
-    # Step 4: Use memory-efficient loading
-    return _load_gpt_oss_model_memory_efficient(
+    # Step 3: Use memory-efficient loading
+    return _load_model_memory_efficient(
         actual_osft_cls,
         pretrained_model_name_or_path,
         model_args,
@@ -847,9 +838,9 @@ def _build_osft_kwargs(osft_rank_ratio, osft_target_patterns):
     return osft_kwargs
 
 
-def _configure_osft_attributes(model, osft_upcast_dtype, osft_output_dtype):
+def _set_osft_dtypes(model, osft_upcast_dtype, osft_output_dtype):
     """
-    Set OSFT dtype attributes on model, eliminating duplication.
+    Set OSFT dtype attributes on model for computation precision control.
     
     Args:
         model: The OSFT model to configure
@@ -871,7 +862,6 @@ def _initialize_osft_with_distribution(model):
     Returns:
         The initialized model
     """
-    import torch.distributed as dist
     
     if not dist.is_initialized() or dist.get_world_size() == 1:
         # Simple cases: non-distributed or single process
@@ -961,7 +951,7 @@ def setup_osft_model(
         model = model.to(device)
     
     # Set OSFT dtype attributes (common for both paths)
-    _configure_osft_attributes(model, osft_upcast_dtype, osft_output_dtype)
+    _set_osft_dtypes(model, osft_upcast_dtype, osft_output_dtype)
     
     # Initialize OSFT decomposition
     return _initialize_osft_with_distribution(model)
@@ -1000,10 +990,8 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             is_gpt_oss = is_gpt_oss_model(config)
             if is_gpt_oss:
                 # Remove any OSFT-specific parameters that GPT-OSS constructor won't accept
-                filtered_kwargs = _filter_osft_parameters(kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
-                super().__init__(config, **filtered_kwargs)
-            else:
-                super().__init__(config, **kwargs)
+                kwargs = _filter_osft_parameters(kwargs, OSFT_GPT_OSS_FILTERED_PARAMS)
+            super().__init__(config, **kwargs)
             self.osft_config = osft_config or {}  # Maps parameter names → top_k
             self.name_mapping = {}
             self.osft_params = (
@@ -1041,12 +1029,9 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
             initialize_osft = kwargs.pop('initialize_osft', False)
             
             # Check if this is a GPT-OSS model
-            try:
-                from transformers import AutoConfig
-                temp_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, trust_remote_code=True)
-                is_gpt_oss = is_gpt_oss_model(temp_config)
-            except:
-                is_gpt_oss = False
+            from transformers import AutoConfig
+            temp_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, trust_remote_code=True)
+            is_gpt_oss = is_gpt_oss_model(temp_config)
             
             if is_gpt_oss:
                 model = _load_gpt_oss_model(cls, pretrained_model_name_or_path, model_args, kwargs, init_cfg, osft_memory_efficient_init)

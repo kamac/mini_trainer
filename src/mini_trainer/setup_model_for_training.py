@@ -11,7 +11,7 @@ from torch.distributed.device_mesh import init_device_mesh
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from mini_trainer.utils import log_rank_0, patch_target_module
 from mini_trainer.osft_utils import OSFTModel, setup_osft_model
-from mini_trainer.gpt_oss_utils import freeze_gpt_oss_router_params, is_gpt_oss_model
+from mini_trainer.gpt_oss_utils import freeze_router_params, is_gpt_oss_model
 
 
 
@@ -20,16 +20,6 @@ from mini_trainer.gpt_oss_utils import freeze_gpt_oss_router_params, is_gpt_oss_
 def wrap_fsdp2(model: torch.nn.Module, train_dtype: torch.dtype = torch.float32) -> torch.nn.Module:
     # Check if this is a memory-constrained model (OSFT models)
     is_memory_constrained = hasattr(model, 'osft_config')
-    
-    # Move model to GPU and disable HuggingFace cache
-    if model.device.type != 'cuda':
-        if is_memory_constrained:
-            log_rank_0("🧠 Skipping explicit GPU movement for memory-constrained model - FSDP2 will handle during sharding")
-        else:
-            # Move the model to the GPU if it's not already there (standard models)
-            local_rank = int(os.environ['LOCAL_RANK'])
-            device = torch.device('cuda', local_rank)
-            model.to(device)
 
     if hasattr(model, 'config'):
         try:
@@ -185,7 +175,7 @@ def setup_model(
     osft: bool = False,
     local_rank: int = 0,
     save_dtype: str | torch.dtype | None = None,
-    train_dtype: torch.dtype | None = None,
+    train_dtype: torch.dtype = torch.float32,
     osft_upcast_dtype: torch.dtype = torch.float32,
     osft_output_dtype: torch.dtype | None = None,
     osft_rank_ratio: float | None = None,
@@ -276,10 +266,10 @@ def setup_model(
         raise ValueError("error: model does not have a `torch_dtype` setting, cannot save model in this dtype")
     # Freeze GPT-OSS router parameters BEFORE FSDP2 setup to avoid uniformity issues
     if is_gpt_oss:
-        freeze_gpt_oss_router_params(model)
+        freeze_router_params(model)
     
     # Convert all trainable parameters to specified training dtype
-    if train_dtype is not None and not osft:
+    if not osft:
         log_rank_0(f"🔧 Converting trainable parameters to {train_dtype} for training")
         converted_count = 0
         for name, param in model.named_parameters():
