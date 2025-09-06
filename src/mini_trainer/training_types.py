@@ -55,6 +55,9 @@ class TrainingArgs:
     osft_target_patterns: list[str] | None = field(default=None, metadata={
         "help": "A list of patterns to match against the model's parameter names to target for OSFT. By default, we try to resolve the configuration which best suits your model.",
     })
+    osft_upcast_dtype: str | None = field(default="float32", metadata={"help": "Upcast dtype for OSFT computations. Can be 'float16', 'bfloat16', 'float32', etc."})
+    osft_output_dtype: str | None = field(default=None, metadata={"help": "Output dtype for OSFT. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc."})
+    osft_memory_efficient_init: bool = field(default=False, metadata={"help": "Enable memory-efficient OSFT initialization (useful for large models and GPT-OSS)"})
     
     # Output options
     min_samples_per_checkpoint: Optional[int] = field(default=None, metadata={"help": "If provided, this must be the number of samples to process before saving a checkpoint."})
@@ -78,4 +81,5 @@ class TrainingArgs:
     checkpoint_at_epoch: bool = field(default=False, metadata={"help": "Whether to checkpoint at the end of each epoch."})
     save_final_checkpoint: bool = field(default=True, metadata={"help": "Whether the model should be saved at the end of training or not. Off by default to avoid accidentally overwriting the best checkpoint."})
     save_dtype: str | None = field(default=None, metadata={"help": "The dtype to save the model in. If None, uses original model dtype. Can be 'float16', 'bfloat16', 'float32', etc."})
+    train_dtype: str = field(default="float32", metadata={"help": "Dtype for training computations. Can be 'float16', 'bfloat16', 'float32', etc."})
 

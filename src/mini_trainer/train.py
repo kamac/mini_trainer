@@ -781,7 +781,6 @@ def main(
         lr_scheduler=lr_scheduler,
         num_training_steps=num_training_steps,
         scheduler_kwargs=scheduler_kwargs_dict,
-        train_dtype=train_dtype_torch,
     )
     
     train(

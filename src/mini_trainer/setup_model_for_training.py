@@ -17,7 +17,7 @@ from mini_trainer.gpt_oss_utils import freeze_router_params, is_gpt_oss_model
 
 # New simple HF-only activation-checkpointing + FSDP2 wrapper
 # This mirrors TorchTitan: checkpoint each block, then shard each block and the full model.
-def wrap_fsdp2(model: torch.nn.Module, train_dtype: torch.dtype = torch.float32) -> torch.nn.Module:
+def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
     # Check if this is a memory-constrained model (OSFT models)
     is_memory_constrained = hasattr(model, 'osft_config')
 
@@ -42,15 +42,10 @@ def wrap_fsdp2(model: torch.nn.Module, train_dtype: torch.dtype = torch.float32)
     world_size = dist.get_world_size()
     mesh = init_device_mesh("cuda", [world_size], mesh_dim_names=["fsdp"])
 
-    # 4) Mixed-precision policy using specified train_dtype
-    # Special case: Any OSFT model needs bfloat16 to work with Flash Attention
-    if is_memory_constrained or hasattr(model, 'osft_config'):
-        param_dtype = torch.bfloat16
-    else:
-        param_dtype = train_dtype
-    
+    # 4) Mixed-precision policy using bfloat16 for Flash Attention compatibility
+    # Flash Attention requires bfloat16 for proper operation
     mp_policy = MixedPrecisionPolicy(
-        param_dtype=param_dtype, 
+        param_dtype=torch.bfloat16, 
         reduce_dtype=torch.float32,
     )
 
@@ -312,7 +307,6 @@ def setup_training_components(
     lr_scheduler: str,
     num_training_steps: Optional[int] = None,
     scheduler_kwargs: Optional[Dict[str, Any]] = None,
-    train_dtype: torch.dtype = torch.float32,
 ) -> tuple[torch.nn.Module, torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler]:
     """
     Set up training components including model wrapping, optimizer, and learning rate scheduler.
@@ -332,7 +326,7 @@ def setup_training_components(
     
     # Using FSDP2 wrapper
     log_rank_0("Using FSDP2 wrapper")
-    model = wrap_fsdp2(model, train_dtype=train_dtype)
+    model = wrap_fsdp2(model)
     
     # Filter parameters to only include those that require gradients
     # This handles cases where some parameters (e.g., frozen router params) have requires_grad=False
