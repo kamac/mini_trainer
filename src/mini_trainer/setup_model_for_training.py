@@ -8,21 +8,18 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     checkpoint_wrapper as ptd_checkpoint_wrapper,
 )
 from torch.distributed.device_mesh import init_device_mesh
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from mini_trainer.utils import log_rank_0, patch_target_module
-from mini_trainer.osft_utils import OSFTModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, Mxfp4Config
+from mini_trainer.utils import get_model_class_from_config, log_rank_0, patch_target_module
+from mini_trainer.osft_utils import OSFTModel, _build_osft_kwargs, _initialize_osft_with_distribution, _set_osft_dtypes, create_osft_model_class
+from mini_trainer.gpt_oss_utils import freeze_router_params, is_gpt_oss_model
 
 
 
 # New simple HF-only activation-checkpointing + FSDP2 wrapper
 # This mirrors TorchTitan: checkpoint each block, then shard each block and the full model.
 def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
-    # Move model to GPU and disable HuggingFace cache
-    if model.device.type != 'cuda':
-        # Move the model to the GPU if it's not already there
-        local_rank = int(os.environ['LOCAL_RANK'])
-        device = torch.device('cuda', local_rank)
-        model.to(device)
+    # Check if this is a memory-constrained model (OSFT models)
+    is_memory_constrained = hasattr(model, 'osft_config')
 
     if hasattr(model, 'config'):
         try:
@@ -45,7 +42,8 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
     world_size = dist.get_world_size()
     mesh = init_device_mesh("cuda", [world_size], mesh_dim_names=["fsdp"])
 
-    # 4) Mixed-precision policy (bf16)
+    # 4) Mixed-precision policy using bfloat16 for Flash Attention compatibility
+    # Flash Attention requires bfloat16 for proper operation
     mp_policy = MixedPrecisionPolicy(
         param_dtype=torch.bfloat16, 
         reduce_dtype=torch.float32,
@@ -57,7 +55,13 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
         fully_shard(block, mesh=mesh, mp_policy=mp_policy, reshard_after_forward=reshard)
 
     # 5) FSDP2 wrap full model
+    if is_memory_constrained:
+        log_rank_0("🚀 FSDP2 sharding memory-constrained model - this will handle GPU placement")
     fully_shard(model, mesh=mesh, mp_policy=mp_policy, reshard_after_forward=True)
+    
+    if is_memory_constrained:
+        log_rank_0("✅ FSDP2 sharding complete - model distributed across GPUs")
+    
     return model
 
 def align_model_and_tokenizer(model, tokenizer):
@@ -161,25 +165,135 @@ def get_model_save_dtype(save_dtype: str | torch.dtype | None, model_name_or_pat
     return save_dtype
 
 
+def setup_osft_model(
+    model_class,
+    model_name_or_path: str,
+    base_model_args: dict,
+    tokenizer,
+    is_gpt_oss: bool,
+    rank: int,
+    osft_rank_ratio=None,
+    osft_target_patterns=None,
+    osft_upcast_dtype=torch.float32,
+    osft_output_dtype=None,
+    osft_memory_efficient_init: bool = False,
+):
+    """
+    High-level function to set up an OSFT model with all necessary configuration.
+
+    This function handles both GPT-OSS and standard model paths with minimal
+    duplication.
+
+    Args:
+        model_class: The base model class to use
+        base_model_args: Arguments for model loading
+        tokenizer: Tokenizer for model alignment
+        is_gpt_oss: Whether this is a GPT-OSS model
+        rank: Current process rank
+        osft_rank_ratio: Rank ratio for OSFT decomposition
+        osft_target_patterns: Target patterns for OSFT
+        osft_upcast_dtype: Upcast dtype for OSFT computations
+        osft_output_dtype: Output dtype for OSFT results
+        osft_memory_efficient_init: Whether to use memory-efficient SVD initialization
+
+    Returns:
+        Fully configured and initialized OSFT model
+    """
+    from mini_trainer.setup_model_for_training import align_model_and_tokenizer
+
+    osft_kwargs = _build_osft_kwargs(osft_rank_ratio, osft_target_patterns)
+
+    # Determine the actual model class and config
+    actual_model_class = get_model_class_from_config(model_name_or_path)
+    config = None
+    if not is_gpt_oss:
+        # Standard models need to load a temporary model to get the actual class
+        tmp = model_class.from_pretrained(**base_model_args)
+
+        # GPT-OSS doesn't need to pull the config, but all other models do (for now, anyway)
+        config = tmp.config
+        del tmp
+        torch.cuda.empty_cache()
+
+    # Create OSFT model class and load model
+    osft_cls = create_osft_model_class(actual_model_class)
+    model_load_args = {
+        **base_model_args,
+        "initialize_osft": False,
+        "osft_memory_efficient_init": osft_memory_efficient_init,
+        **osft_kwargs,
+    }
+
+    # Add config for non-GPT-OSS models
+    if config is not None:
+        model_load_args["config"] = config
+
+    model: OSFTModel = osft_cls.from_pretrained(**model_load_args)
+    model = align_model_and_tokenizer(model, tokenizer)
+
+    # Set OSFT dtype attributes
+    _set_osft_dtypes(model, osft_upcast_dtype, osft_output_dtype)
+
+    # Handle initialization based on memory_efficient_init flag
+    device = torch.device("cuda", rank)
+
+    if osft_memory_efficient_init:
+        # Memory-efficient: Initialize OSFT on CPU, then move to GPU
+        log_rank_0("🧠 Using memory-efficient OSFT initialization (CPU → GPU)")
+        model = _initialize_osft_with_distribution(model)
+        log_rank_0("Initialized OSFT model, keeping on CPU until sharding")
+
+    else:
+        # Standard: Move to GPU first, then initialize OSFT on GPU
+        log_rank_0("⚡ Using standard OSFT initialization (GPU-native)")
+        model = model.to(device)
+        model = _initialize_osft_with_distribution(model)
+
+    return model
+
+
 def setup_model(
     model_name_or_path: str,
     osft: bool = False,
     local_rank: int = 0,
     save_dtype: str | torch.dtype | None = None,
+    train_dtype: torch.dtype = torch.float32,
     osft_upcast_dtype: torch.dtype = torch.float32,
     osft_output_dtype: torch.dtype | None = None,
     osft_rank_ratio: float | None = None,
     osft_target_patterns: list[str] | None = None,
     use_liger_kernels: bool = False,
+    osft_memory_efficient_init: bool = False,
 ) -> torch.nn.Module | OSFTModel:
     base_model_args = {
         "pretrained_model_name_or_path": model_name_or_path,
+        "torch_dtype": train_dtype,  # Ensure models are loaded in the training dtype
     }
-    # Check if flash_attn is available, otherwise use eager
-    # in practice we will need flash attention when running this repo
+    
+    # Get model config to check for GPT-OSS and set appropriate configurations
+    model_config = AutoConfig.from_pretrained(model_name_or_path)
+    is_gpt_oss = is_gpt_oss_model(model_config)
+    
+    # Set up quantization config for GPT-OSS models
+    if is_gpt_oss:
+        try:
+            # Try to specify the target dtype for dequantization
+            quantization_config = Mxfp4Config(dequantize=True)
+            # If the config supports dtype specification, use it
+            if hasattr(quantization_config, 'torch_dtype'):
+                quantization_config.torch_dtype = train_dtype
+            log_rank_0("🎯 Detected GPT-OSS model - applying dequantization for training")
+        except ImportError:
+            log_rank_0("⚠️ GPT-OSS model detected but Mxfp4Config not available - using default config")
+    
+    # Check if flash_attn is available and set appropriate attention implementation
     try:
         import flash_attn
-        base_model_args["attn_implementation"] = "flash_attention_2"
+        if is_gpt_oss:
+            base_model_args["attn_implementation"] = "kernels-community/vllm-flash-attn3"
+            log_rank_0("Set attention implementation to vllm-flash-attn3 for GPT-OSS")
+        else:
+            base_model_args["attn_implementation"] = "flash_attention_2"
     except ImportError as e:
         if os.environ.get("TESTING", "false").lower() == "true":
             base_model_args["attn_implementation"] = "eager"
@@ -211,65 +325,23 @@ def setup_model(
         model = ModelClass.from_pretrained(**base_model_args)
         return align_model_and_tokenizer(model, tokenizer)
     
-    # Load a subclassed model that supports orthogonal subspace learning using SVD decomposition
     def load_osft_model():
-        # Import utility to decompose weights and inject projected low-rank updates
-        from mini_trainer.osft_utils import create_osft_model_class, auto_generate_target_osft_config
-
-        tmp = ModelClass.from_pretrained(**base_model_args)
-        tmp = align_model_and_tokenizer(tmp, tokenizer)
-        # Dynamically subclass model to override linear layers with OSFT-decomposed versions
-        osft_cls = create_osft_model_class(tmp.__class__)
-        cfg = tmp.config
-        del tmp
-        torch.cuda.empty_cache()
-
-        osft_kwargs = {}
-        if osft_rank_ratio:
-            osft_kwargs["rank_ratio"] = osft_rank_ratio
-        if osft_target_patterns:
-            osft_kwargs["target_patterns"] = osft_target_patterns
-
-        model: OSFTModel = osft_cls.from_pretrained(
-            **base_model_args,
-            config=cfg,
-            initialize_osft=False,
-            **osft_kwargs,
+        """Load a model with OSFT (Orthogonal Subspace Fine-Tuning) support."""
+        # If osft_output_dtype is not specified, use train_dtype for consistency
+        effective_osft_output_dtype = osft_output_dtype if osft_output_dtype is not None else train_dtype
+        return setup_osft_model(
+            model_class=ModelClass,
+            model_name_or_path=model_name_or_path,
+            base_model_args=base_model_args,
+            tokenizer=tokenizer,
+            is_gpt_oss=is_gpt_oss,
+            rank=local_rank,
+            osft_rank_ratio=osft_rank_ratio,
+            osft_target_patterns=osft_target_patterns,
+            osft_upcast_dtype=osft_upcast_dtype,
+            osft_output_dtype=effective_osft_output_dtype,
+            osft_memory_efficient_init=osft_memory_efficient_init,
         )
-        
-        # we need to set these as attributes because HF Transformers
-        # doesn't like torch.dtype to be passed in through kwargs (aside from the `torch_dtype` kwarg)
-        model.upcast_dtype = osft_upcast_dtype
-        if osft_output_dtype:
-            model.output_dtype = osft_output_dtype
-
-        model = align_model_and_tokenizer(model, tokenizer)
-        device = torch.device("cuda", local_rank)
-        model = model.to(device)
-
-        # NOTE(osilkin): SVD over large models is very expensive, to optimize we handle
-        # each of these cases separately:
-        # 1.) non-distributed --> assume single process
-        # 2.) distributed, world-size=1 --> assume single process
-        # 3.) distributed, world-size > 1 --> use distributed SVD computation
-
-        if not dist.is_initialized() or dist.get_world_size() == 1:
-            # simple cases #1 and #2
-            model.reinitialize_osft(decompose_existing_weights=True)
-            torch.cuda.empty_cache()
-            return model
-
-        # Use distributed SVD computation across all ranks
-        log_rank_0("🚀 Computing distributed OSFT decomposition across all ranks")
-        world_size = dist.get_world_size()
-        log_rank_0(f"Distributing OSFT work across {world_size} ranks")
-
-        # Initialize OSFT using distributed computation
-        model.reinitialize_osft_distributed()
-
-        log_rank_0("✅ Distributed OSFT decomposition complete")
-        torch.cuda.empty_cache()
-        return model
     
     # Choose whether to apply orthogonal subspace learning (OSL) based on `osft` flag
     # OSL enables continual fine-tuning by constraining updates to low-rank directions orthogonal to critical knowledge that is to be preserved
@@ -279,8 +351,28 @@ def setup_model(
     model.config.torch_dtype = get_model_save_dtype(save_dtype, model_name_or_path)
     if not model.config.torch_dtype:
         raise ValueError("error: model does not have a `torch_dtype` setting, cannot save model in this dtype")
+    # Freeze GPT-OSS router parameters BEFORE FSDP2 setup to avoid uniformity issues
+    if is_gpt_oss:
+        freeze_router_params(model)
+    
+    # Convert all trainable parameters to specified training dtype
+    log_rank_0(f"🔧 Converting trainable parameters to {train_dtype} for training")
+    converted_count = 0
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.dtype != train_dtype:
+            param.data = param.data.to(train_dtype)
+            converted_count += 1
+    if converted_count > 0:
+        log_rank_0(f"✅ Converted {converted_count} parameters to {train_dtype}")
+    else:
+        log_rank_0(f"✅ All parameters already in {train_dtype}")
 
-    if model.__class__.__name__ not in [
+    # Get the base class name (strip WithOSFT suffix if present for OSFT models)
+    class_name = model.__class__.__name__
+    if class_name.endswith("WithOSFT"):
+        class_name = class_name[:-8]  # Remove "WithOSFT"
+    
+    if class_name not in [
         "MistralForCausalLM",
         "GPTDolomiteForCausalLM", 
         "LlamaForCausalLM",
@@ -288,9 +380,10 @@ def setup_model(
         "GemmaForCausalLM",
         "MixtralForCausalLM",
         "GraniteForCausalLM",
+        "GptOssForCausalLM"
     ]:
         log_rank_0(
-            f"\033[38;2;255;255;0mWarning: Model class name: {model.__class__.__name__} is not in the list of supported models.\033[0m",
+            f"\033[38;2;255;255;0mWarning: Model class name: {class_name} is not in the list of supported models.\033[0m",
             to_print=True,
         )
 
@@ -329,8 +422,18 @@ def setup_training_components(
     log_rank_0("Using FSDP2 wrapper")
     model = wrap_fsdp2(model)
     
+    # Filter parameters to only include those that require gradients
+    # This handles cases where some parameters (e.g., frozen router params) have requires_grad=False
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    
+    # Count trainable parameters for logging
+    total_params = sum(1 for _ in model.parameters())
+    trainable_count = len(trainable_params)
+    if total_params != trainable_count:
+        log_rank_0(f"📊 Using {trainable_count}/{total_params} trainable parameters in optimizer")
+    
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        trainable_params,
         lr=learning_rate,
         betas=(0.9, 0.95),
         weight_decay=0.0,

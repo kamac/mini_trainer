@@ -33,13 +33,14 @@ dependencies = [
     "deprecated",
     "numpy<2",
     "datasets",
-    "transformers",
+    "transformers>=4.55.0",
     "ninja",
     "numba",
     "rich",
     "pytest",
     "tox",
     "tox-uv",
+    "liger-kernel",
 ]
 
 [project.optional-dependencies]
