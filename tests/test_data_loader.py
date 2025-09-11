@@ -571,6 +571,137 @@ class TestGetDataLoader:
         if len(batch) > 0:
             assert isinstance(batch[0], dict)
             assert 'input_ids' in batch[0]
+    
+    def test_validation_split_creates_two_loaders(self, temp_data_file):
+        """Test that validation_split > 0 creates both train and validation loaders."""
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # Both loaders should be created
+        assert train_loader is not None
+        assert val_loader is not None
+        
+        # Check that datasets have correct sizes (10 total samples)
+        assert len(train_loader.dataset) == 8  # 80% of 10
+        assert len(val_loader.dataset) == 2   # 20% of 10
+        
+        # Both should have the same batch size
+        assert train_loader.batch_size == val_loader.batch_size == 2
+    
+    def test_no_validation_split_returns_none(self, temp_data_file):
+        """Test that validation_split=0 returns None for validation loader."""
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=4,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.0,  # No validation split
+            rank=0,
+            world_size=1
+        )
+        
+        # Only train loader should be created
+        assert train_loader is not None
+        assert val_loader is None
+        
+        # Train loader should have all samples
+        assert len(train_loader.dataset) == 10
+    
+    def test_validation_split_with_different_ratios(self, temp_data_file):
+        """Test validation split with different ratios to ensure correct splitting."""
+        test_cases = [
+            (0.1, 9, 1),   # 10% validation
+            (0.3, 7, 3),   # 30% validation
+            (0.5, 5, 5),   # 50% validation
+            (0.7, 3, 7),   # 70% validation
+        ]
+        
+        for val_split, expected_train, expected_val in test_cases:
+            train_loader, val_loader = get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=val_split,
+                rank=0,
+                world_size=1
+            )
+            
+            assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split}"
+            assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split}"
+            
+            # Verify no overlap between train and val data
+            # Since we can't directly access indices due to the refactoring,
+            # we'll just verify the total equals original dataset size
+            total_samples = len(train_loader.dataset) + len(val_loader.dataset)
+            assert total_samples == 10, f"Total samples mismatch for split {val_split}"
+    
+    def test_train_val_data_are_different(self):
+        """Test that train and validation datasets contain different samples."""
+        # Create a temporary file with unique samples
+        data = [
+            {
+                "input_ids": list(range(i*10, (i+1)*10)),  # Each sample has different input_ids
+                "labels": list(range(i*10, (i+1)*10)),
+                "len": 10,
+                "num_loss_counted_tokens": 10
+            }
+            for i in range(10)
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            train_loader, val_loader = get_data_loader(
+                data_path=temp_path,
+                batch_size=1,  # Use batch size 1 to get individual samples
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.3,
+                rank=0,
+                world_size=1
+            )
+            
+            # Collect all input_ids from train loader
+            train_samples = []
+            for batch in train_loader:
+                for minibatch in batch:
+                    # Extract the actual tensor values
+                    input_ids = minibatch['input_ids'].squeeze().tolist()
+                    train_samples.append(tuple(input_ids))  # Use tuple for hashability
+            
+            # Collect all input_ids from validation loader
+            val_samples = []
+            for batch in val_loader:
+                for minibatch in batch:
+                    input_ids = minibatch['input_ids'].squeeze().tolist()
+                    val_samples.append(tuple(input_ids))
+            
+            # Convert to sets and check for no overlap
+            train_set = set(train_samples)
+            val_set = set(val_samples)
+            
+            assert len(train_set) == 7  # 70% of 10 samples
+            assert len(val_set) == 3   # 30% of 10 samples
+            assert train_set.isdisjoint(val_set), "Train and validation sets should not overlap"
+            
+            # Verify each set contains unique samples
+            assert len(train_samples) == 7, "Should have 7 train samples total"
+            assert len(val_samples) == 3, "Should have 3 validation samples total"
+            
+        finally:
+            os.unlink(temp_path)
 
 
 class TestResetMinibatches:
