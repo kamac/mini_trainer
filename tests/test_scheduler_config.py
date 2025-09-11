@@ -73,7 +73,7 @@ class TestCalculateTrainingSteps:
         data_path = create_test_data(num_samples=20)
         
         try:
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=4,
                 max_tokens_per_gpu=1000,
@@ -106,7 +106,7 @@ class TestCalculateTrainingSteps:
         data_path = create_test_data(num_samples=10)
         
         try:
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=2,
                 max_tokens_per_gpu=1000,

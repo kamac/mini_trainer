@@ -137,3 +137,8 @@ def get_model_class_from_config(model_path):
         raise ValueError(f"Model class {config_class} not found in mapping {mapping}")
     return mapping[config_class]
 
+def destroy_distributed_environment():
+    # wait for checkpoints to show up, once training is complete we tear it down
+    dist.barrier()
+    log_rank_0("Training complete 😀, tearing down distributed environment")
+    dist.destroy_process_group()

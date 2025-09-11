@@ -35,9 +35,9 @@ import torch
 from torch.utils.data import Sampler, Dataset, DataLoader
 import torch.distributed as dist
 import numpy as np
-from datasets import load_dataset
+from datasets import load_dataset, Dataset as HFDataset
 from mini_trainer.batch_packer import batch_lengths_to_minibatches_lpt
-
+from mini_trainer.utils import log_rank_0
 
 def reset_minibatches(num_ranks: int):
     return [[] for _ in range(num_ranks)], np.zeros(num_ranks)
@@ -101,8 +101,36 @@ def batch_lengths_to_minibatches(batch_lengths: list[int], max_tokens_per_rank: 
     return [m[rank] for m in minibatches_indices]
 
 class JsonlDataset(Dataset):
-    def __init__(self, path: str = "/new_data/aldo/v1_reasoning/math_simplerl_qwen_data_token_ids.jsonl"):
-        dataset = load_dataset("json", data_files=path, split="train")
+    def __init__(
+        self,
+        path: str | None = None,
+        max_seq_len: int | None = None,
+        hf_dataset: HFDataset | None = None, 
+    ):
+        """
+        Initializes a JsonlDataset object which we use to load and process the dataset.
+        Accepts either a path to a JSONL file or a pre-loaded HuggingFace dataset.
+
+        Args:
+            path: Path to the JSONL file or HuggingFace dataset name
+            max_seq_len: Maximum sequence length to keep (filters out longer sequences)
+            hf_dataset: Pre-loaded HuggingFace dataset
+        """
+        # dataset can be any of these
+        if hf_dataset is not None:
+            dataset = hf_dataset
+        elif path is not None:
+            dataset = load_dataset("json", data_files=path, split="train")
+        else:
+            raise ValueError("Either 'path' or 'hf_dataset' must be provided")
+
+        # The two required fields on a dataset are `input_ids` and `labels`,
+        # everything else is computable. Here we handle the case when we
+        # must actually provide them
+        dataset = self.add_necessary_fields(dataset)
+        if max_seq_len is not None:
+            dataset = self.filter_by_max_seq_len(dataset, max_seq_len)
+
         self.dataset = dataset
 
     def __len__(self):
@@ -126,6 +154,83 @@ class JsonlDataset(Dataset):
             'len': sample['len'],
             'num_loss_counted_tokens': loss_counted_tokens,
         }
+    
+    @classmethod
+    def add_necessary_fields(cls, dataset: HFDataset) -> HFDataset:
+        required_fields = ["input_ids", "labels"]
+        for field in required_fields:
+            if field not in dataset.features:
+                raise ValueError(f"Dataset must contain '{field}' field")
+        if "len" not in dataset.features:
+            dataset = dataset.map(lambda s: {"len": len(s["input_ids"])})
+        if "num_loss_counted_tokens" not in dataset.features:
+            dataset = dataset.map(
+                lambda s: {
+                    "num_loss_counted_tokens": sum(
+                        1 for tok in s["labels"] if tok != -100
+                    )
+                }
+            )
+        
+        return dataset
+
+    @classmethod
+    def filter_by_max_seq_len(cls, dataset: HFDataset, max_seq_len: int) -> HFDataset:
+        dataset = dataset.filter(lambda x: x["len"] <= max_seq_len)
+        return dataset
+    
+    @classmethod
+    def load_and_split(
+        cls, 
+        data_path: str, 
+        validation_split: float = 0.0,
+        max_seq_len: int | None = None,
+        seed: int = 42
+    ) -> tuple["JsonlDataset", "JsonlDataset | None"]:
+        """Load dataset and optionally split into train/validation sets.
+        
+        Args:
+            data_path: Path to JSONL file or HuggingFace dataset name
+            validation_split: Fraction of data to use for validation (0.0 to 1.0)
+            max_seq_len: Maximum sequence length (filters out longer sequences)
+            seed: Random seed for reproducible splits
+            
+        Returns:
+            tuple: (train_dataset, val_dataset) where val_dataset is None if validation_split <= 0
+        """
+        # handle either local or HF dataset
+        if os.path.exists(data_path):
+            hf_dataset = load_dataset("json", data_files=data_path, split="train")
+        else:
+            hf_dataset = load_dataset(data_path, split="train")
+        
+        # add necessary fields & filter by max_seq_len if specified
+        hf_dataset = cls.add_necessary_fields(hf_dataset)
+        if max_seq_len is not None:
+            original_size = len(hf_dataset)
+            hf_dataset = cls.filter_by_max_seq_len(hf_dataset, max_seq_len)
+            filtered_size = len(hf_dataset)
+            if original_size > filtered_size:
+                log_rank_0(
+                    f"\033[33mFiltered out {original_size - filtered_size} samples "
+                    f"(out of {original_size}) that exceed max_seq_len={max_seq_len}\033[0m"
+                )
+        
+        val_dataset = None
+        if validation_split <= 0.0:
+            # default case
+            train_dataset = cls(hf_dataset=hf_dataset)
+            return train_dataset, val_dataset
+        
+        # validation split case
+        split_dataset = hf_dataset.train_test_split(
+            test_size=validation_split,
+            seed=seed,
+            shuffle=True
+        )
+        train_dataset = cls(hf_dataset=split_dataset["train"])
+        val_dataset = cls(hf_dataset=split_dataset["test"])
+        return train_dataset, val_dataset
     
 class EpochSampler(Sampler):
     """
@@ -289,7 +394,8 @@ class MaxTokensPerRankCollator:
             all_minibatches.append(mb_collate_fn(mb, batch_num_loss_counted_tokens))
 
         return all_minibatches
-    
+
+
 def get_data_loader(
     data_path: str,
     batch_size: int,
@@ -299,43 +405,89 @@ def get_data_loader(
     world_size: int | None = None,
     dummy_sample: dict | None = None,
     num_workers: int = 0,
-):
-    """Create a data loader with epoch-based sampling.
+    validation_split: float = 0.0,
+    max_seq_len: int | None = None,
+) -> tuple[DataLoader, DataLoader | None]:
+    """Create data loader(s) with optional train/validation split.
     
-    The EpochSampler is used for all training modes (EPOCH, STEP, TOKEN, and INFINITE).
-    For infinite training, the training loop will continue iterating over epochs indefinitely.
+    Efficiently loads the dataset once and splits it if needed, avoiding
+    multiple reads of the same data.
+    
+    Args:
+        data_path: Path to the JSONL data file or HuggingFace dataset
+        batch_size: Number of samples per batch
+        max_tokens_per_gpu: Maximum tokens per GPU per step
+        seed: Random seed for reproducibility
+        rank: Rank of the current process (for distributed training)
+        world_size: Total number of processes (for distributed training)
+        dummy_sample: Sample to use for padding when ranks have uneven data
+        num_workers: Number of worker processes for data loading
+        validation_split: Fraction of data to use for validation (0.0 to 1.0)
+        max_seq_len: Maximum sequence length to keep (filters out longer sequences)
+    
+    Returns:
+        tuple: (train_loader, val_loader) where val_loader is None if validation_split <= 0
     """
-    dataset = JsonlDataset(data_path)
-    sampler = EpochSampler(len(dataset), seed=seed)
+    # create the jsonl dataset and optionally the validation dataset
+    train_dataset, val_dataset = JsonlDataset.load_and_split(
+        data_path=data_path,
+        validation_split=validation_split,
+        max_seq_len=max_seq_len,
+        seed=seed
+    )
+    if val_dataset is not None:
+        log_rank_0(f"Dataset split: {len(train_dataset)} train, {len(val_dataset)} validation samples")
+    else:
+        log_rank_0(f"Dataset split: {len(train_dataset)} train")
+
     
-    return DataLoader(
-        dataset, 
+    # Create collate function
+    collate_fn = MaxTokensPerRankCollator(
+        max_tokens_per_gpu, 
+        rank=rank, 
+        world_size=world_size, 
+        dummy_sample=dummy_sample,
+    )
+    
+    # Create train data loader
+    train_sampler = EpochSampler(len(train_dataset), seed=seed)
+    train_loader = DataLoader(
+        train_dataset, 
         batch_size, 
-        sampler=sampler,
-        collate_fn=MaxTokensPerRankCollator(
-            max_tokens_per_gpu, 
-            rank=rank, 
-            world_size=world_size, 
-            dummy_sample=dummy_sample,
-        ),
+        sampler=train_sampler,
+        collate_fn=collate_fn,
         num_workers=num_workers,
-        persistent_workers=(num_workers > 0),
         drop_last=False,
     )
+    
+    # Create validation data loader if needed
+    val_loader = None
+    if val_dataset is not None:
+        val_sampler = EpochSampler(len(val_dataset), seed=seed)
+        val_loader = DataLoader(
+            val_dataset, 
+            batch_size, 
+            sampler=val_sampler,
+            collate_fn=collate_fn,
+            num_workers=num_workers,
+            drop_last=False,
+        )
+    
+    return train_loader, val_loader
 
 if __name__ == "__main__":
-    data_loader = get_data_loader(data_path="test.jsonl",
-                                  batch_size=40,
-                                  max_tokens_per_gpu=5000,
-                                  seed=37,
-                                  rank=0,
-                                  world_size=2)
-    data_loader2 = get_data_loader(data_path="test.jsonl",
-                                  batch_size=26,
-                                  max_tokens_per_gpu=5000,
-                                  seed=37,
-                                  rank=1,
-                                  world_size=2)
+    data_loader, _ = get_data_loader(data_path="test.jsonl",
+                                     batch_size=40,
+                                     max_tokens_per_gpu=5000,
+                                     seed=37,
+                                     rank=0,
+                                     world_size=2)
+    data_loader2, _ = get_data_loader(data_path="test.jsonl",
+                                      batch_size=26,
+                                      max_tokens_per_gpu=5000,
+                                      seed=37,
+                                      rank=1,
+                                      world_size=2)
     data_loader = iter(data_loader)
     data_loader2 = iter(data_loader2)
     batch = next(data_loader)

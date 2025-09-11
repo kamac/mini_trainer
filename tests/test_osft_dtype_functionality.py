@@ -209,18 +209,18 @@ class TestOSFTModelDtypeIntegration:
             # Should use model's output_dtype
             assert reconstructed.dtype == torch.bfloat16
     
-    @patch('transformers.AutoConfig')
     @patch('mini_trainer.setup_model_for_training.create_osft_model_class')
     @patch('mini_trainer.setup_model_for_training.align_model_and_tokenizer')
     @patch('torch.distributed.is_initialized', return_value=False)
     @patch('torch.distributed.get_rank', return_value=0)
     @patch('mini_trainer.setup_model_for_training.get_model_class_from_config')
-    @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM')
+    @patch('transformers.AutoModelForCausalLM')
     @patch('mini_trainer.setup_model_for_training.AutoTokenizer')
+    @patch('transformers.AutoConfig')
     @patch('mini_trainer.setup_model_for_training.AutoConfig')
-    def test_setup_model_assigns_dtype_attributes(self, mock_auto_config, mock_tokenizer, mock_model_class, 
-                                                 mock_get_model_class, mock_get_rank, mock_is_initialized, 
-                                                 mock_align, mock_create_osft, mock_transformers_auto_config):
+    def test_setup_model_assigns_dtype_attributes(self, mock_setup_auto_config, mock_trans_auto_config, mock_tokenizer, mock_model_class,
+                                                 mock_get_model_class, mock_get_rank, mock_is_initialized,
+                                                 mock_align, mock_create_osft):
         """Test that setup_model correctly assigns dtype attributes to OSFT model."""
         # Create a real object to verify attribute assignment
         class MockOSFTModel:
@@ -268,10 +268,11 @@ class TestOSFTModelDtypeIntegration:
         # Mock get_model_class_from_config to return the base model class
         mock_get_model_class.return_value = MockBaseModelClass
         
-        # Mock AutoConfig globally (used in osft_utils) to return a non-GPT-OSS config
+        # Mock AutoConfig to return a non-GPT-OSS config
         mock_osft_config = MagicMock()
         mock_osft_config.model_type = "llama"  # Not GPT-OSS
-        mock_transformers_auto_config.from_pretrained.return_value = mock_osft_config
+        mock_setup_auto_config.from_pretrained.return_value = mock_osft_config
+        mock_trans_auto_config.from_pretrained.return_value = mock_osft_config
         
         # Mock tokenizer
         mock_tokenizer_inst = MagicMock()
@@ -329,15 +330,16 @@ class TestOSFTParameterFlow:
     @patch('mini_trainer.train.train')
     @patch('mini_trainer.train.get_data_loader')
     @patch('mini_trainer.train.calculate_num_training_steps')
+    @patch('mini_trainer.train.destroy_distributed_environment')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank')
-    def test_dtype_flow_from_main_to_svd_model(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader,
+    def test_dtype_flow_from_main_to_svd_model(self, mock_get_rank, mock_init_dist, mock_destroy_dist, mock_calc_steps, mock_data_loader,
                                                mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test that dtype parameters flow correctly from main to SVD model creation."""
         # Setup mocks
         mock_get_rank.return_value = 0
         mock_calc_steps.return_value = 1000
-        mock_data_loader.return_value = MagicMock()
+        mock_data_loader.return_value = (MagicMock(), MagicMock())
         
         mock_model = MagicMock()
         mock_model.upcast_dtype = torch.bfloat16

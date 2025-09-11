@@ -323,7 +323,7 @@ class TestGetDataLoader:
         expected_batch_size = 4
         expected_grad_accum_steps = 1
 
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=4,
             max_tokens_per_gpu=500,
@@ -370,7 +370,7 @@ class TestGetDataLoader:
         expected_batch_size = 8
         expected_grad_accum_steps = 1
 
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=expected_batch_size,
             max_tokens_per_gpu=50000,  # so we dont accumulate in this test
@@ -424,7 +424,7 @@ class TestGetDataLoader:
         expected_leftover_samples = 2
 
         # first try with an even batch size, so the last step will have 2 samples
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=8,
             max_tokens_per_gpu=500,
@@ -470,7 +470,7 @@ class TestGetDataLoader:
         expected_leftover_samples = 1
 
         # first try with an even batch size, so the last step will have 2 samples
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=9,
             max_tokens_per_gpu=500,
@@ -496,7 +496,7 @@ class TestGetDataLoader:
 
         # next, change our rank to the last to see the difference
         mock_rank.return_value = 1
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=9,
             max_tokens_per_gpu=500,
@@ -536,7 +536,7 @@ class TestGetDataLoader:
             'num_loss_counted_tokens': 0
         }
         
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=8,
             max_tokens_per_gpu=1000,
@@ -555,7 +555,7 @@ class TestGetDataLoader:
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
     def test_data_loader_iteration(self, mock_world_size, mock_rank, temp_data_file):
         """Test that data loader can be iterated."""
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=2,
             max_tokens_per_gpu=500,
@@ -650,7 +650,7 @@ class TestEpochTracking:
                     f.write(json.dumps(sample) + '\n')
             
             # Create data loaders with different batch sizes
-            loader1 = get_data_loader(
+            loader1, _ = get_data_loader(
                 data_path=test_file,
                 batch_size=10,  # Evenly divides dataset
                 max_tokens_per_gpu=1000,
@@ -659,7 +659,7 @@ class TestEpochTracking:
                 world_size=1
             )
             
-            loader2 = get_data_loader(
+            loader2, _ = get_data_loader(
                 data_path=test_file,
                 batch_size=7,  # Does not evenly divide dataset
                 max_tokens_per_gpu=1000,
@@ -749,7 +749,7 @@ class TestDataLoaderBatchCount:
         
         try:
             # Create data loader with finite sampler
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=4,
                 max_tokens_per_gpu=1000,
@@ -781,7 +781,7 @@ class TestDataLoaderBatchCount:
         data_path = create_test_data(num_samples=10)
         
         try:
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=2,
                 max_tokens_per_gpu=1000,

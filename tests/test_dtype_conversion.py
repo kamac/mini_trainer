@@ -64,14 +64,15 @@ class TestMainFunctionDtypeIntegration:
     @patch('mini_trainer.train.train')
     @patch('mini_trainer.train.get_data_loader')
     @patch('mini_trainer.train.calculate_num_training_steps')
+    @patch('mini_trainer.train.destroy_distributed_environment')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank', return_value=0)
-    def test_main_dtype_defaults(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader,
+    def test_main_dtype_defaults(self, mock_get_rank, mock_init_dist, mock_destroy_dist, mock_calc_steps, mock_data_loader,
                                 mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test main function with default dtype values."""
         # Setup mocks
         mock_calc_steps.return_value = 1000
-        mock_data_loader.return_value = MagicMock()
+        mock_data_loader.return_value = (MagicMock(), MagicMock())
         mock_setup_model.return_value = MagicMock()
         mock_setup_components.return_value = (MagicMock(), MagicMock(), MagicMock())
         
@@ -108,15 +109,16 @@ class TestMainFunctionDtypeIntegration:
     @patch('mini_trainer.train.train')
     @patch('mini_trainer.train.get_data_loader')
     @patch('mini_trainer.train.calculate_num_training_steps')
+    @patch('mini_trainer.train.destroy_distributed_environment')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank')
-    def test_main_dtype_custom_strings(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader,
+    def test_main_dtype_custom_strings(self, mock_get_rank, mock_init_dist, mock_destroy_dist, mock_calc_steps, mock_data_loader,
                                      mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test main function with custom string dtype values."""
         # Setup mocks
         mock_get_rank.return_value = 0
         mock_calc_steps.return_value = 1000
-        mock_data_loader.return_value = MagicMock()
+        mock_data_loader.return_value = (MagicMock(), MagicMock())
         mock_setup_model.return_value = MagicMock()
         mock_setup_components.return_value = (MagicMock(), MagicMock(), MagicMock())
         
@@ -147,19 +149,20 @@ class TestMainFunctionDtypeIntegration:
     @patch('torch.distributed.get_world_size', return_value=1)
     @patch('mini_trainer.train.get_node_rank', return_value=0)
     @patch('mini_trainer.train.setup_model')
-    @patch('mini_trainer.train.setup_training_components')  
+    @patch('mini_trainer.train.setup_training_components')
     @patch('mini_trainer.train.train')
     @patch('mini_trainer.train.get_data_loader')
     @patch('mini_trainer.train.calculate_num_training_steps')
+    @patch('mini_trainer.train.destroy_distributed_environment')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank')
-    def test_main_dtype_none_values(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader,
+    def test_main_dtype_none_values(self, mock_get_rank, mock_init_dist, mock_destroy_dist, mock_calc_steps, mock_data_loader,
                                   mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test main function with None dtype values."""
         # Setup mocks
         mock_get_rank.return_value = 0
         mock_calc_steps.return_value = 1000
-        mock_data_loader.return_value = MagicMock()
+        mock_data_loader.return_value = (MagicMock(), MagicMock())
         mock_setup_model.return_value = MagicMock()
         mock_setup_components.return_value = (MagicMock(), MagicMock(), MagicMock())
         
@@ -220,14 +223,15 @@ class TestDtypeParameterLogging:
     @patch('mini_trainer.train.train')
     @patch('mini_trainer.train.get_data_loader')
     @patch('mini_trainer.train.calculate_num_training_steps')
+    @patch('mini_trainer.train.destroy_distributed_environment')
     @patch('mini_trainer.train.init_distributed_environment')
     @patch('torch.distributed.get_rank')
-    def test_dtype_parameters_logged(self, mock_get_rank, mock_init_dist, mock_calc_steps, mock_data_loader, mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
+    def test_dtype_parameters_logged(self, mock_get_rank, mock_init_dist, mock_destroy_dist, mock_calc_steps, mock_data_loader, mock_train_fn, mock_setup_components, mock_setup_model, mock_get_node_rank, mock_world_size):
         """Test that dtype parameters are included in logged parameters."""
         # Setup mocks
         mock_get_rank.return_value = 0  # Ensure we're on rank 0 for logging
         mock_calc_steps.return_value = 1000
-        mock_data_loader.return_value = MagicMock()
+        mock_data_loader.return_value = (MagicMock(), MagicMock())
         mock_setup_model.return_value = MagicMock()
         mock_setup_components.return_value = (MagicMock(), MagicMock(), MagicMock())
         

@@ -13,7 +13,6 @@ except ImportError:
 
 
 from . import api_train
-from . import async_structured_logger
 from . import batch_metrics
 from . import batch_packer
 from . import none_reduction_losses
@@ -29,7 +28,6 @@ from .training_types import TorchrunArgs, TrainingArgs, TrainingMode
 
 __all__ = [
     "api_train",
-    "async_structured_logger",
     "batch_metrics", 
     "batch_packer",
     "none_reduction_losses",
