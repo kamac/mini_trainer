@@ -204,9 +204,11 @@ class TestMaxTokensPerRankCollator:
              'len': 400, 'num_loss_counted_tokens': 400},
         ]
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_collator_initialization(self, mock_world_size, mock_rank):
+    def test_collator_initialization(self, mock_world_size, mock_rank, mock_available, mock_initialized):
         """Test collator initialization with distributed settings."""
         collator = MaxTokensPerRankCollator(max_tokens_per_rank=1000)
         
@@ -316,9 +318,11 @@ class TestGetDataLoader:
         yield temp_path
         os.unlink(temp_path)
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=1)
-    def test_get_data_loader_basic_epoch_sampler(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_basic_epoch_sampler(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 4
         expected_grad_accum_steps = 1
@@ -363,9 +367,11 @@ class TestGetDataLoader:
         assert loader.sampler.epoch == 1
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=1)
-    def test_get_data_loader_epoch_wraparound(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_epoch_wraparound(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test data loader behavior at epoch boundaries with EpochSampler."""
         expected_batch_size = 8
         expected_grad_accum_steps = 1
@@ -415,9 +421,11 @@ class TestGetDataLoader:
 
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_get_data_loader_two_gpus(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_two_gpus(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 8
         expected_grad_accum_steps = 1
@@ -454,17 +462,21 @@ class TestGetDataLoader:
         assert loader.sampler.epoch == 0
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=1)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_mock_rank(self, mock_world_size, mock_rank, temp_data_file):
+    def test_mock_rank(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         assert mock_rank() == 1
         mock_rank.return_value = 0
         assert mock_rank() == 0
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_padded_samples_on_last_rank(self, mock_world_size, mock_rank, temp_data_file):
+    def test_padded_samples_on_last_rank(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 9
         expected_leftover_samples = 1
@@ -551,9 +563,11 @@ class TestGetDataLoader:
         assert loader.collate_fn.world_size == 4
         assert loader.collate_fn.dummy_sample == dummy_sample
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_data_loader_iteration(self, mock_world_size, mock_rank, temp_data_file):
+    def test_data_loader_iteration(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test that data loader can be iterated."""
         loader, _ = get_data_loader(
             data_path=temp_data_file,
