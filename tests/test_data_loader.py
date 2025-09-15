@@ -357,7 +357,7 @@ class TestGetDataLoader:
         microbatch = batch[0]
         assert microbatch['num_samples'] == 2  # we now expect the last 2 samples to be here
 
-        # now we should have seen all samples, but we need to incremenet the epoch
+        # now we should have seen all samples, but we need to increment the epoch
         assert loader.sampler.epoch == 0
         loader.sampler.set_epoch(1)
         assert loader.sampler.epoch == 1
@@ -595,6 +595,48 @@ class TestGetDataLoader:
         # Both should have the same batch size
         assert train_loader.batch_size == val_loader.batch_size == 2
     
+    def test_validation_split_determinism(self, temp_data_file):
+        """Test that validation split is deterministic with the same seed."""
+        # first call with seed 42
+        train_loader1, val_loader1 = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # second call with same seed should produce identical split
+        train_loader2, val_loader2 = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # collect samples from both loaders to compare
+        def get_samples(loader):
+            samples = []
+            for batch in loader:
+                for mb in batch:
+                    # store the input_ids as they uniquely identify samples
+                    samples.append(mb['input_ids'].tolist())
+            return samples
+        
+        train_samples1 = get_samples(train_loader1)
+        train_samples2 = get_samples(train_loader2)
+        val_samples1 = get_samples(val_loader1)
+        val_samples2 = get_samples(val_loader2)
+        
+        # assert identical splits
+        assert train_samples1 == train_samples2, "Train datasets should be identical with same seed"
+        assert val_samples1 == val_samples2, "Validation datasets should be identical with same seed"
+    
     def test_no_validation_split_returns_none(self, temp_data_file):
         """Test that validation_split=0 returns None for validation loader."""
         train_loader, val_loader = get_data_loader(
@@ -614,34 +656,32 @@ class TestGetDataLoader:
         # Train loader should have all samples
         assert len(train_loader.dataset) == 10
     
-    def test_validation_split_with_different_ratios(self, temp_data_file):
+    @pytest.mark.parametrize("val_split,expected_train,expected_val", [
+        (0.1, 9, 1),   # 10% validation
+        (0.3, 7, 3),   # 30% validation
+        (0.5, 5, 5),   # 50% validation
+        (0.7, 3, 7),   # 70% validation
+    ])
+    def test_validation_split_with_different_ratios(self, temp_data_file, val_split, expected_train, expected_val):
         """Test validation split with different ratios to ensure correct splitting."""
-        test_cases = [
-            (0.1, 9, 1),   # 10% validation
-            (0.3, 7, 3),   # 30% validation
-            (0.5, 5, 5),   # 50% validation
-            (0.7, 3, 7),   # 70% validation
-        ]
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=val_split,
+            rank=0,
+            world_size=1
+        )
         
-        for val_split, expected_train, expected_val in test_cases:
-            train_loader, val_loader = get_data_loader(
-                data_path=temp_data_file,
-                batch_size=2,
-                max_tokens_per_gpu=500,
-                seed=42,
-                validation_split=val_split,
-                rank=0,
-                world_size=1
-            )
-            
-            assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split}"
-            assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split}"
-            
-            # Verify no overlap between train and val data
-            # Since we can't directly access indices due to the refactoring,
-            # we'll just verify the total equals original dataset size
-            total_samples = len(train_loader.dataset) + len(val_loader.dataset)
-            assert total_samples == 10, f"Total samples mismatch for split {val_split}"
+        assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split}"
+        assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split}"
+        
+        # Verify no overlap between train and val data
+        # Since we can't directly access indices due to the refactoring,
+        # we'll just verify the total equals original dataset size
+        total_samples = len(train_loader.dataset) + len(val_loader.dataset)
+        assert total_samples == 10, f"Total samples mismatch for split {val_split}"
     
     def test_train_val_data_are_different(self):
         """Test that train and validation datasets contain different samples."""
@@ -700,6 +740,215 @@ class TestGetDataLoader:
             assert len(train_samples) == 7, "Should have 7 train samples total"
             assert len(val_samples) == 3, "Should have 3 validation samples total"
             
+        finally:
+            os.unlink(temp_path)
+    
+    def test_validation_split_odd_dataset_size(self):
+        """Test validation split with odd-sized dataset to verify rounding behavior."""
+        # create a dataset with 11 samples
+        data = [
+            {
+                "input_ids": list(range(i*10, (i+1)*10)),
+                "labels": list(range(i*10, (i+1)*10)),
+                "len": 10,
+                "num_loss_counted_tokens": 10
+            }
+            for i in range(11)  # 11 samples
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            # test different splits with 11 samples
+            # note: HuggingFace's train_test_split uses round() which rounds to nearest even
+            test_cases = [
+                (0.1, 9, 2),    # 10% of 11 = 1.1, rounds to 2 val samples
+                (0.2, 8, 3),    # 20% of 11 = 2.2, rounds to 3 val samples
+                (0.3, 7, 4),    # 30% of 11 = 3.3, rounds to 4 val samples
+                (0.4, 6, 5),    # 40% of 11 = 4.4, rounds to 5 val samples
+                (0.5, 5, 6),    # 50% of 11 = 5.5, rounds to 6 val samples
+            ]
+            
+            for val_split, expected_train, expected_val in test_cases:
+                train_loader, val_loader = get_data_loader(
+                    data_path=temp_path,
+                    batch_size=2,
+                    max_tokens_per_gpu=500,
+                    seed=42,
+                    validation_split=val_split,
+                    rank=0,
+                    world_size=1
+                )
+                
+                assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split} with 11 samples"
+                assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split} with 11 samples"
+                
+                # verify total is still 11
+                total_samples = len(train_loader.dataset) + len(val_loader.dataset)
+                assert total_samples == 11, f"Total samples mismatch for split {val_split} with 11 samples"
+        finally:
+            os.unlink(temp_path)
+    
+    def test_validation_split_boundary_cases(self, temp_data_file):
+        """Test boundary and invalid validation split ratios."""
+        # test ratio of 1.0 (all data for validation)
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=1.0,
+                rank=0,
+                world_size=1
+            )
+        
+        # test negative ratio
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=-0.1,
+                rank=0,
+                world_size=1
+            )
+        
+        # test ratio > 1
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=1.5,
+                rank=0,
+                world_size=1
+            )
+        
+        # test very small positive ratio (should work)
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.01,  # 1%
+            rank=0,
+            world_size=1
+        )
+        assert train_loader is not None
+        assert val_loader is not None
+        # with 10 samples, 1% should give us 1 validation sample
+        assert len(val_loader.dataset) >= 1
+        
+        # test very large ratio close to 1.0
+        # note: with 10 samples, 0.9 (90%) is the highest we can go before train set becomes empty
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.9,  # 90%
+            rank=0,
+            world_size=1
+        )
+        assert train_loader is not None
+        assert val_loader is not None
+        # with 10 samples, 90% should give us 9 validation samples, 1 train sample
+        assert len(train_loader.dataset) == 1
+        assert len(val_loader.dataset) == 9
+    
+    def test_max_seq_len_filtering(self):
+        """Test that max_seq_len parameter filters out samples exceeding the length."""
+        # create a dataset with samples of varying lengths
+        data = [
+            {
+                "input_ids": list(range(i * 10)),
+                "labels": list(range(i * 10)),
+                "len": i * 10,
+                "num_loss_counted_tokens": i * 10
+            }
+            for i in range(1, 11)  # lengths: 10, 20, 30, ..., 100
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            # test with max_seq_len=50, should keep samples with len <= 50
+            train_loader, val_loader = get_data_loader(
+                data_path=temp_path,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.2,
+                max_seq_len=50,
+                rank=0,
+                world_size=1
+            )
+            
+            # with max_seq_len=50, only samples with lengths 10, 20, 30, 40, 50 should remain (5 samples)
+            # with 20% validation split: 4 train, 1 validation
+            assert len(train_loader.dataset) == 4
+            assert len(val_loader.dataset) == 1
+            
+            # verify that samples in the datasets have correct lengths by checking the dataset directly
+            for i in range(len(train_loader.dataset)):
+                sample = train_loader.dataset[i]
+                assert sample['len'] <= 50, f"Train sample {i} has len {sample['len']} > 50"
+            
+            for i in range(len(val_loader.dataset)):
+                sample = val_loader.dataset[i]
+                assert sample['len'] <= 50, f"Val sample {i} has len {sample['len']} > 50"
+        finally:
+            os.unlink(temp_path)
+    
+    @pytest.mark.parametrize("max_seq_len,expected_total", [
+        (25, 2),   # only lengths 10, 20
+        (35, 3),   # only lengths 10, 20, 30
+        (100, 10), # all samples
+        (5, 0),    # no samples (all filtered out)
+    ])
+    def test_max_seq_len_filtering_various_lengths(self, max_seq_len, expected_total):
+        """Test max_seq_len filtering with various thresholds."""
+        # create a dataset with samples of varying lengths
+        data = [
+            {
+                "input_ids": list(range(i * 10)),
+                "labels": list(range(i * 10)),
+                "len": i * 10,
+                "num_loss_counted_tokens": i * 10
+            }
+            for i in range(1, 11)  # lengths: 10, 20, 30, ..., 100
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            train_loader, _ = get_data_loader(
+                data_path=temp_path,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.0,
+                max_seq_len=max_seq_len,
+                rank=0,
+                world_size=1
+            )
+            
+            assert len(train_loader.dataset) == expected_total
         finally:
             os.unlink(temp_path)
 

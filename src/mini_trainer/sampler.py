@@ -32,7 +32,7 @@ import tempfile
 from unittest.mock import patch
 
 import torch
-from torch.utils.data import Sampler, Dataset, DataLoader
+from torch.utils.data import Sampler, Dataset, DataLoader, SequentialSampler
 import torch.distributed as dist
 import numpy as np
 from datasets import load_dataset, Dataset as HFDataset
@@ -138,11 +138,8 @@ class JsonlDataset(Dataset):
 
     def __getitem__(self, index: int):
         sample = self.dataset[int(index)]
-        # Ignore the index and return a fresh copy of the sequence tensor.
-
-        # HACK(osilkin): this is just a hack to use the instructlab data processing script
-        # determine the number of loss counted tokens here
-
+        
+        # Determine the number of loss-counted tokens if the field is missing.
         if (loss_counted_tokens := sample.get("num_loss_counted_tokens", None)) is None:
             loss_counted_tokens = sum(
                 1 if label != -100 else 0 for label in sample["labels"]
@@ -334,7 +331,7 @@ class MaxTokensPerRankCollator:
     This collator takes a batch of samples (obtained using indices from a sampler
     like InfiniteSampler) and performs two main tasks:
     1. Filters out samples longer than `max_tokens_per_rank`.
-    2. Uses `batch_lengths_to_minibatches` to determine how to distribute the
+    2. Uses `batch_lengths_to_minibatches_lpt` to determine how to distribute the
        remaining samples across ranks into one or more 'minibatches', ensuring
        no rank exceeds `max_tokens_per_rank` per minibatch.
     3. For the current rank, it fetches the assigned samples (or dummy samples
@@ -355,10 +352,14 @@ class MaxTokensPerRankCollator:
     def __init__(self, max_tokens_per_rank: int, rank: int=None, world_size: int=None, dummy_sample=None):
         self.max_tokens_per_rank = max_tokens_per_rank
 
-        self.global_rank = rank if rank is not None else dist.get_rank()
-        self.world_size = (
-            world_size if world_size is not None else dist.get_world_size()
-        )
+        if rank is None:
+            self.global_rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+        else:
+            self.global_rank = rank
+        if world_size is None:
+            self.world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
+        else:
+            self.world_size = world_size
         if dummy_sample is None:
             dummy_sample = {'input_ids': torch.tensor([15, 14, 13, 12, 11], dtype=torch.long),
                             'labels': torch.tensor([-100, -100, -100, -100, -100], dtype=torch.long),
@@ -378,7 +379,7 @@ class MaxTokensPerRankCollator:
         """
         batch_ = [b for b in batch if b['len'] <= self.max_tokens_per_rank]
         if len(batch_) < len(batch):
-            print(f"\033[38;5;196mremoved {len(batch) - len(batch_)} samples from batch because they are longer than the max tokens per gpu\033[0m")
+            log_rank_0(f"\033[38;5;196mremoved {len(batch) - len(batch_)} samples from batch because they are longer than the max tokens per gpu\033[0m")
         # Use filtered batch for lengths and loss counts
         batch_lengths = [sample["len"] for sample in batch_]
         batch_num_loss_counted_tokens = sum(
@@ -428,6 +429,10 @@ def get_data_loader(
     Returns:
         tuple: (train_loader, val_loader) where val_loader is None if validation_split <= 0
     """
+    # validate validation_split parameter
+    if validation_split < 0.0 or validation_split >= 1.0:
+        raise ValueError(f"validation_split must be between 0 and 1 (exclusive of 1), got {validation_split}")
+    
     # create the jsonl dataset and optionally the validation dataset
     train_dataset, val_dataset = JsonlDataset.load_and_split(
         data_path=data_path,
@@ -463,7 +468,7 @@ def get_data_loader(
     # Create validation data loader if needed
     val_loader = None
     if val_dataset is not None:
-        val_sampler = EpochSampler(len(val_dataset), seed=seed)
+        val_sampler = SequentialSampler(val_dataset)
         val_loader = DataLoader(
             val_dataset, 
             batch_size, 
