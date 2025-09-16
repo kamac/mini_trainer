@@ -123,7 +123,8 @@ def run_training(torch_args: TorchrunArgs, train_args: TrainingArgs) -> None:
     # validation-related arguments
     if train_args.validation_split > 0.0:
         command.append(f"--validation-split={train_args.validation_split}")
-        command.append(f"--validation-frequency={train_args.validation_frequency}")
+        if train_args.validation_frequency is not None:
+            command.append(f"--validation-frequency={train_args.validation_frequency}")
 
         if train_args.save_best_val_loss:
             command.append(f"--save-best-val-loss")

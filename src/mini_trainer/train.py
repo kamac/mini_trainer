@@ -607,7 +607,7 @@ def train(
         val_loss_improvement_threshold: float = 0.0,
         use_wandb: bool = False,
         val_data_loader: torch.utils.data.DataLoader | None = None,
-        validation_frequency: int = 100,
+        validation_frequency: int | None = None,
     ):
     """
     Runs the model training loop.
@@ -637,7 +637,7 @@ def train(
         save_best_val_loss (bool, optional): Whether to save checkpoints when validation loss improves. Defaults to False.
         val_loss_improvement_threshold (float, optional): Minimum validation loss improvement required to trigger a save. Defaults to 0.0 (any improvement).
         val_data_loader (torch.utils.data.DataLoader | None, optional): Validation data loader. If provided, validation loss will be computed. Defaults to None.
-        validation_frequency (int, optional): Frequency of validation evaluation in steps. Defaults to 100.
+        validation_frequency (int | None, optional): Frequency of validation evaluation in steps. Required when val_data_loader is provided. Defaults to None.
 
     Note:
         The training_mode can be provided as either a TrainingMode enum value or a string:
@@ -771,7 +771,7 @@ def train(
                     'val_loss': last_validation_loss,
                 }
             # Add validation metrics if it's time to validate
-            if val_data_loader is not None and step % validation_frequency == 0:
+            if val_data_loader is not None and validation_frequency is not None and step % validation_frequency == 0:
                 val_metrics = compute_validation_loss(model, val_data_loader, device)
                 if val_metrics and 'val_loss' in val_metrics:
                     last_validation_loss = val_metrics['val_loss']
@@ -931,7 +931,7 @@ def main(
  
     # validation parameters
     validation_split: Annotated[float, Option(help="Fraction of data to use for validation (0.0 to 1.0)")] = 0.0,
-    validation_frequency: Annotated[int, Option(help="Frequency of validation evaluation (in steps)")] = 100,
+    validation_frequency: Annotated[int | None, Option(help="Frequency of validation evaluation (in steps). Required when validation_split > 0")] = None,
     
     # checkpoint parameters
     save_best_val_loss: Annotated[bool, Option(help="Whether to save checkpoints when validation loss improves")] = False,
@@ -962,8 +962,8 @@ def main(
     if validation_split < 0.0 or validation_split >= 1.0:
         raise ValueError("validation_split must be between 0.0 and 1.0 (exclusive)")
 
-    if validation_split > 0.0 and validation_frequency <= 0:
-        raise ValueError("validation_frequency must be positive when validation_split > 0")
+    if validation_split > 0.0 and (validation_frequency is None or validation_frequency <= 0):
+        raise ValueError("validation_frequency must be provided and positive when validation_split > 0")
     
     # Convert string dtypes to torch dtypes
     osft_upcast_dtype_torch = parse_dtype(osft_upcast_dtype)
