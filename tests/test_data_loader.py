@@ -204,9 +204,11 @@ class TestMaxTokensPerRankCollator:
              'len': 400, 'num_loss_counted_tokens': 400},
         ]
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_collator_initialization(self, mock_world_size, mock_rank):
+    def test_collator_initialization(self, mock_world_size, mock_rank, mock_available, mock_initialized):
         """Test collator initialization with distributed settings."""
         collator = MaxTokensPerRankCollator(max_tokens_per_rank=1000)
         
@@ -316,14 +318,16 @@ class TestGetDataLoader:
         yield temp_path
         os.unlink(temp_path)
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=1)
-    def test_get_data_loader_basic_epoch_sampler(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_basic_epoch_sampler(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 4
         expected_grad_accum_steps = 1
 
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=4,
             max_tokens_per_gpu=500,
@@ -357,20 +361,22 @@ class TestGetDataLoader:
         microbatch = batch[0]
         assert microbatch['num_samples'] == 2  # we now expect the last 2 samples to be here
 
-        # now we should have seen all samples, but we need to incremenet the epoch
+        # now we should have seen all samples, but we need to increment the epoch
         assert loader.sampler.epoch == 0
         loader.sampler.set_epoch(1)
         assert loader.sampler.epoch == 1
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=1)
-    def test_get_data_loader_epoch_wraparound(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_epoch_wraparound(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test data loader behavior at epoch boundaries with EpochSampler."""
         expected_batch_size = 8
         expected_grad_accum_steps = 1
 
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=expected_batch_size,
             max_tokens_per_gpu=50000,  # so we dont accumulate in this test
@@ -415,16 +421,18 @@ class TestGetDataLoader:
 
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_get_data_loader_two_gpus(self, mock_world_size, mock_rank, temp_data_file):
+    def test_get_data_loader_two_gpus(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 8
         expected_grad_accum_steps = 1
         expected_leftover_samples = 2
 
         # first try with an even batch size, so the last step will have 2 samples
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=8,
             max_tokens_per_gpu=500,
@@ -454,23 +462,27 @@ class TestGetDataLoader:
         assert loader.sampler.epoch == 0
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=1)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_mock_rank(self, mock_world_size, mock_rank, temp_data_file):
+    def test_mock_rank(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         assert mock_rank() == 1
         mock_rank.return_value = 0
         assert mock_rank() == 0
 
 
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_padded_samples_on_last_rank(self, mock_world_size, mock_rank, temp_data_file):
+    def test_padded_samples_on_last_rank(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test basic data loader creation."""
         expected_batch_size = 9
         expected_leftover_samples = 1
 
         # first try with an even batch size, so the last step will have 2 samples
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=9,
             max_tokens_per_gpu=500,
@@ -496,7 +508,7 @@ class TestGetDataLoader:
 
         # next, change our rank to the last to see the difference
         mock_rank.return_value = 1
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=9,
             max_tokens_per_gpu=500,
@@ -536,7 +548,7 @@ class TestGetDataLoader:
             'num_loss_counted_tokens': 0
         }
         
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=8,
             max_tokens_per_gpu=1000,
@@ -551,11 +563,13 @@ class TestGetDataLoader:
         assert loader.collate_fn.world_size == 4
         assert loader.collate_fn.dummy_sample == dummy_sample
     
+    @patch('mini_trainer.sampler.dist.is_initialized', return_value=True)
+    @patch('mini_trainer.sampler.dist.is_available', return_value=True)
     @patch('mini_trainer.sampler.dist.get_rank', return_value=0)
     @patch('mini_trainer.sampler.dist.get_world_size', return_value=2)
-    def test_data_loader_iteration(self, mock_world_size, mock_rank, temp_data_file):
+    def test_data_loader_iteration(self, mock_world_size, mock_rank, mock_available, mock_initialized, temp_data_file):
         """Test that data loader can be iterated."""
-        loader = get_data_loader(
+        loader, _ = get_data_loader(
             data_path=temp_data_file,
             batch_size=2,
             max_tokens_per_gpu=500,
@@ -571,6 +585,386 @@ class TestGetDataLoader:
         if len(batch) > 0:
             assert isinstance(batch[0], dict)
             assert 'input_ids' in batch[0]
+    
+    def test_validation_split_creates_two_loaders(self, temp_data_file):
+        """Test that validation_split > 0 creates both train and validation loaders."""
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # Both loaders should be created
+        assert train_loader is not None
+        assert val_loader is not None
+        
+        # Check that datasets have correct sizes (10 total samples)
+        assert len(train_loader.dataset) == 8  # 80% of 10
+        assert len(val_loader.dataset) == 2   # 20% of 10
+        
+        # Both should have the same batch size
+        assert train_loader.batch_size == val_loader.batch_size == 2
+    
+    def test_validation_split_determinism(self, temp_data_file):
+        """Test that validation split is deterministic with the same seed."""
+        # first call with seed 42
+        train_loader1, val_loader1 = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # second call with same seed should produce identical split
+        train_loader2, val_loader2 = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.2,
+            rank=0,
+            world_size=1
+        )
+        
+        # collect samples from both loaders to compare
+        def get_samples(loader):
+            samples = []
+            for batch in loader:
+                for mb in batch:
+                    # store the input_ids as they uniquely identify samples
+                    samples.append(mb['input_ids'].tolist())
+            return samples
+        
+        train_samples1 = get_samples(train_loader1)
+        train_samples2 = get_samples(train_loader2)
+        val_samples1 = get_samples(val_loader1)
+        val_samples2 = get_samples(val_loader2)
+        
+        # assert identical splits
+        assert train_samples1 == train_samples2, "Train datasets should be identical with same seed"
+        assert val_samples1 == val_samples2, "Validation datasets should be identical with same seed"
+    
+    def test_no_validation_split_returns_none(self, temp_data_file):
+        """Test that validation_split=0 returns None for validation loader."""
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=4,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.0,  # No validation split
+            rank=0,
+            world_size=1
+        )
+        
+        # Only train loader should be created
+        assert train_loader is not None
+        assert val_loader is None
+        
+        # Train loader should have all samples
+        assert len(train_loader.dataset) == 10
+    
+    @pytest.mark.parametrize("val_split,expected_train,expected_val", [
+        (0.1, 9, 1),   # 10% validation
+        (0.3, 7, 3),   # 30% validation
+        (0.5, 5, 5),   # 50% validation
+        (0.7, 3, 7),   # 70% validation
+    ])
+    def test_validation_split_with_different_ratios(self, temp_data_file, val_split, expected_train, expected_val):
+        """Test validation split with different ratios to ensure correct splitting."""
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=val_split,
+            rank=0,
+            world_size=1
+        )
+        
+        assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split}"
+        assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split}"
+        
+        # Verify no overlap between train and val data
+        # Since we can't directly access indices due to the refactoring,
+        # we'll just verify the total equals original dataset size
+        total_samples = len(train_loader.dataset) + len(val_loader.dataset)
+        assert total_samples == 10, f"Total samples mismatch for split {val_split}"
+    
+    def test_train_val_data_are_different(self):
+        """Test that train and validation datasets contain different samples."""
+        # Create a temporary file with unique samples
+        data = [
+            {
+                "input_ids": list(range(i*10, (i+1)*10)),  # Each sample has different input_ids
+                "labels": list(range(i*10, (i+1)*10)),
+                "len": 10,
+                "num_loss_counted_tokens": 10
+            }
+            for i in range(10)
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            train_loader, val_loader = get_data_loader(
+                data_path=temp_path,
+                batch_size=1,  # Use batch size 1 to get individual samples
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.3,
+                rank=0,
+                world_size=1
+            )
+            
+            # Collect all input_ids from train loader
+            train_samples = []
+            for batch in train_loader:
+                for minibatch in batch:
+                    # Extract the actual tensor values
+                    input_ids = minibatch['input_ids'].squeeze().tolist()
+                    train_samples.append(tuple(input_ids))  # Use tuple for hashability
+            
+            # Collect all input_ids from validation loader
+            val_samples = []
+            for batch in val_loader:
+                for minibatch in batch:
+                    input_ids = minibatch['input_ids'].squeeze().tolist()
+                    val_samples.append(tuple(input_ids))
+            
+            # Convert to sets and check for no overlap
+            train_set = set(train_samples)
+            val_set = set(val_samples)
+            
+            assert len(train_set) == 7  # 70% of 10 samples
+            assert len(val_set) == 3   # 30% of 10 samples
+            assert train_set.isdisjoint(val_set), "Train and validation sets should not overlap"
+            
+            # Verify each set contains unique samples
+            assert len(train_samples) == 7, "Should have 7 train samples total"
+            assert len(val_samples) == 3, "Should have 3 validation samples total"
+            
+        finally:
+            os.unlink(temp_path)
+    
+    def test_validation_split_odd_dataset_size(self):
+        """Test validation split with odd-sized dataset to verify rounding behavior."""
+        # create a dataset with 11 samples
+        data = [
+            {
+                "input_ids": list(range(i*10, (i+1)*10)),
+                "labels": list(range(i*10, (i+1)*10)),
+                "len": 10,
+                "num_loss_counted_tokens": 10
+            }
+            for i in range(11)  # 11 samples
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            # test different splits with 11 samples
+            # note: HuggingFace's train_test_split uses round() which rounds to nearest even
+            test_cases = [
+                (0.1, 9, 2),    # 10% of 11 = 1.1, rounds to 2 val samples
+                (0.2, 8, 3),    # 20% of 11 = 2.2, rounds to 3 val samples
+                (0.3, 7, 4),    # 30% of 11 = 3.3, rounds to 4 val samples
+                (0.4, 6, 5),    # 40% of 11 = 4.4, rounds to 5 val samples
+                (0.5, 5, 6),    # 50% of 11 = 5.5, rounds to 6 val samples
+            ]
+            
+            for val_split, expected_train, expected_val in test_cases:
+                train_loader, val_loader = get_data_loader(
+                    data_path=temp_path,
+                    batch_size=2,
+                    max_tokens_per_gpu=500,
+                    seed=42,
+                    validation_split=val_split,
+                    rank=0,
+                    world_size=1
+                )
+                
+                assert len(train_loader.dataset) == expected_train, f"Failed for split {val_split} with 11 samples"
+                assert len(val_loader.dataset) == expected_val, f"Failed for split {val_split} with 11 samples"
+                
+                # verify total is still 11
+                total_samples = len(train_loader.dataset) + len(val_loader.dataset)
+                assert total_samples == 11, f"Total samples mismatch for split {val_split} with 11 samples"
+        finally:
+            os.unlink(temp_path)
+    
+    def test_validation_split_boundary_cases(self, temp_data_file):
+        """Test boundary and invalid validation split ratios."""
+        # test ratio of 1.0 (all data for validation)
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=1.0,
+                rank=0,
+                world_size=1
+            )
+        
+        # test negative ratio
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=-0.1,
+                rank=0,
+                world_size=1
+            )
+        
+        # test ratio > 1
+        with pytest.raises(ValueError, match="validation_split must be between 0 and 1 \\(exclusive of 1\\)"):
+            get_data_loader(
+                data_path=temp_data_file,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=1.5,
+                rank=0,
+                world_size=1
+            )
+        
+        # test very small positive ratio (should work)
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.01,  # 1%
+            rank=0,
+            world_size=1
+        )
+        assert train_loader is not None
+        assert val_loader is not None
+        # with 10 samples, 1% should give us 1 validation sample
+        assert len(val_loader.dataset) >= 1
+        
+        # test very large ratio close to 1.0
+        # note: with 10 samples, 0.9 (90%) is the highest we can go before train set becomes empty
+        train_loader, val_loader = get_data_loader(
+            data_path=temp_data_file,
+            batch_size=2,
+            max_tokens_per_gpu=500,
+            seed=42,
+            validation_split=0.9,  # 90%
+            rank=0,
+            world_size=1
+        )
+        assert train_loader is not None
+        assert val_loader is not None
+        # with 10 samples, 90% should give us 9 validation samples, 1 train sample
+        assert len(train_loader.dataset) == 1
+        assert len(val_loader.dataset) == 9
+    
+    def test_max_seq_len_filtering(self):
+        """Test that max_seq_len parameter filters out samples exceeding the length."""
+        # create a dataset with samples of varying lengths
+        data = [
+            {
+                "input_ids": list(range(i * 10)),
+                "labels": list(range(i * 10)),
+                "len": i * 10,
+                "num_loss_counted_tokens": i * 10
+            }
+            for i in range(1, 11)  # lengths: 10, 20, 30, ..., 100
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            # test with max_seq_len=50, should keep samples with len <= 50
+            train_loader, val_loader = get_data_loader(
+                data_path=temp_path,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.2,
+                max_seq_len=50,
+                rank=0,
+                world_size=1
+            )
+            
+            # with max_seq_len=50, only samples with lengths 10, 20, 30, 40, 50 should remain (5 samples)
+            # with 20% validation split: 4 train, 1 validation
+            assert len(train_loader.dataset) == 4
+            assert len(val_loader.dataset) == 1
+            
+            # verify that samples in the datasets have correct lengths by checking the dataset directly
+            for i in range(len(train_loader.dataset)):
+                sample = train_loader.dataset[i]
+                assert sample['len'] <= 50, f"Train sample {i} has len {sample['len']} > 50"
+            
+            for i in range(len(val_loader.dataset)):
+                sample = val_loader.dataset[i]
+                assert sample['len'] <= 50, f"Val sample {i} has len {sample['len']} > 50"
+        finally:
+            os.unlink(temp_path)
+    
+    @pytest.mark.parametrize("max_seq_len,expected_total", [
+        (25, 2),   # only lengths 10, 20
+        (35, 3),   # only lengths 10, 20, 30
+        (100, 10), # all samples
+        (5, 0),    # no samples (all filtered out)
+    ])
+    def test_max_seq_len_filtering_various_lengths(self, max_seq_len, expected_total):
+        """Test max_seq_len filtering with various thresholds."""
+        # create a dataset with samples of varying lengths
+        data = [
+            {
+                "input_ids": list(range(i * 10)),
+                "labels": list(range(i * 10)),
+                "len": i * 10,
+                "num_loss_counted_tokens": i * 10
+            }
+            for i in range(1, 11)  # lengths: 10, 20, 30, ..., 100
+        ]
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            for item in data:
+                json.dump(item, f)
+                f.write('\n')
+            temp_path = f.name
+        
+        try:
+            train_loader, _ = get_data_loader(
+                data_path=temp_path,
+                batch_size=2,
+                max_tokens_per_gpu=500,
+                seed=42,
+                validation_split=0.0,
+                max_seq_len=max_seq_len,
+                rank=0,
+                world_size=1
+            )
+            
+            assert len(train_loader.dataset) == expected_total
+        finally:
+            os.unlink(temp_path)
 
 
 class TestResetMinibatches:
@@ -650,7 +1044,7 @@ class TestEpochTracking:
                     f.write(json.dumps(sample) + '\n')
             
             # Create data loaders with different batch sizes
-            loader1 = get_data_loader(
+            loader1, _ = get_data_loader(
                 data_path=test_file,
                 batch_size=10,  # Evenly divides dataset
                 max_tokens_per_gpu=1000,
@@ -659,7 +1053,7 @@ class TestEpochTracking:
                 world_size=1
             )
             
-            loader2 = get_data_loader(
+            loader2, _ = get_data_loader(
                 data_path=test_file,
                 batch_size=7,  # Does not evenly divide dataset
                 max_tokens_per_gpu=1000,
@@ -749,7 +1143,7 @@ class TestDataLoaderBatchCount:
         
         try:
             # Create data loader with finite sampler
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=4,
                 max_tokens_per_gpu=1000,
@@ -781,7 +1175,7 @@ class TestDataLoaderBatchCount:
         data_path = create_test_data(num_samples=10)
         
         try:
-            data_loader = get_data_loader(
+            data_loader, _ = get_data_loader(
                 data_path=data_path,
                 batch_size=2,
                 max_tokens_per_gpu=1000,

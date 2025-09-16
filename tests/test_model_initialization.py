@@ -177,9 +177,9 @@ class TestWrapFSDP2:
 class TestSetupModel:
     """Test suite for model setup."""
     
-    @patch('mini_trainer.setup_model_for_training.AutoTokenizer.from_pretrained')
-    @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM.from_pretrained')
-    @patch('mini_trainer.setup_model_for_training.AutoConfig.from_pretrained')
+    @patch('transformers.AutoTokenizer.from_pretrained')
+    @patch('transformers.AutoModelForCausalLM.from_pretrained')
+    @patch('transformers.AutoConfig.from_pretrained')
     @patch('mini_trainer.setup_model_for_training.align_model_and_tokenizer')
     def test_setup_model_standard(self, mock_align, auto_config, mock_model_cls, mock_tokenizer_cls):
         """Test standard model setup without special features."""
@@ -327,9 +327,9 @@ class TestIntegration:
     def test_end_to_end_mock(self):
         """Test end-to-end flow with mocks."""
         with (
-            patch('mini_trainer.setup_model_for_training.AutoTokenizer.from_pretrained') as mock_tok,
-            patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM.from_pretrained') as mock_model_cls,
-            patch('mini_trainer.setup_model_for_training.AutoConfig.from_pretrained') as mock_config,
+            patch('transformers.AutoTokenizer.from_pretrained') as mock_tok,
+            patch('transformers.AutoModelForCausalLM.from_pretrained') as mock_model_cls,
+            patch('transformers.AutoConfig.from_pretrained') as mock_config,
             patch('mini_trainer.setup_model_for_training.wrap_fsdp2') as mock_wrap,
             patch('mini_trainer.setup_model_for_training.log_rank_0'),
             patch('mini_trainer.setup_model_for_training.torch.optim.AdamW') as mock_adamw,

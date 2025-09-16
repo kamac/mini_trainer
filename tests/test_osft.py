@@ -763,7 +763,7 @@ class TestSetupModelIntegration:
     @patch('mini_trainer.setup_model_for_training.log_rank_0')
     @patch('transformers.AutoConfig')
     @patch('mini_trainer.setup_model_for_training.get_model_class_from_config')
-    @patch('mini_trainer.setup_model_for_training.AutoModelForCausalLM')
+    @patch('transformers.AutoModelForCausalLM')
     @patch('mini_trainer.setup_model_for_training.AutoTokenizer')
     @patch('mini_trainer.setup_model_for_training.AutoConfig')
     @patch('mini_trainer.osft_utils.auto_generate_target_osft_config')

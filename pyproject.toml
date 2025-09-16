@@ -59,6 +59,7 @@ dev = [
     "ipykernel",
     "ipdb",
 ]
+wandb = ["wandb"]
 
 [project.urls]
 Homepage = "https://github.com/Red-Hat-AI-Innovation-Team/mini_trainer"

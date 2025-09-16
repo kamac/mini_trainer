@@ -110,7 +110,26 @@ def run_training(torch_args: TorchrunArgs, train_args: TrainingArgs) -> None:
         f"--max-tokens={train_args.max_tokens}",
         f"--train-dtype={train_args.train_dtype}",
     ]
+
     
+    # wandb-related arguments
+    if train_args.wandb_project:
+        command.append(f"--wandb-project={train_args.wandb_project}")
+        if train_args.wandb_run_name:
+            command.append(f"--wandb-run-name={train_args.wandb_run_name}")
+        if train_args.wandb_entity:
+            command.append(f"--wandb-entity={train_args.wandb_entity}")
+
+    # validation-related arguments
+    if train_args.validation_split > 0.0:
+        command.append(f"--validation-split={train_args.validation_split}")
+        if train_args.validation_frequency is not None:
+            command.append(f"--validation-frequency={train_args.validation_frequency}")
+
+        if train_args.save_best_val_loss:
+            command.append(f"--save-best-val-loss")
+            command.append(f"--val-loss-improvement-threshold={train_args.val_loss_improvement_threshold}")
+
     # Add optional min_samples_per_checkpoint if specified
     if train_args.min_samples_per_checkpoint is not None:
         command.append(f"--min-samples-per-checkpoint={train_args.min_samples_per_checkpoint}")
