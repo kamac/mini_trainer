@@ -31,7 +31,7 @@ dependencies = [
     "typer",
     "aiofiles",
     "deprecated",
-    "numpy<2",
+    "numpy<2.3",
     "datasets",
     "transformers>=4.55.0",
     "ninja",
