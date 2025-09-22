@@ -311,18 +311,29 @@ def setup_model(
         liger_fixed_fused_linear_cross_entropy_none_reduction,
     )
     from transformers import AutoModelForCausalLM
-    from liger_kernel.transformers import AutoLigerKernelForCausalLM
 
+    # We patch HF loss unconditionally, since its usage will reappear in other places. 
+    # For example: when liger is being used and we switch the model into eval mode, it still uses the
+    # HF CE loss instead of the Liger Fused Cross-entropy
     patch_target_module(
         "transformers.loss.loss_utils.fixed_cross_entropy",
         hf_fixed_cross_entropy_none_reduction,
     )
-    """need to patch the loss function to not reduce, so we can reduce across all GPUs"""
-    patch_target_module(
-        "liger_kernel.transformers.model.loss_utils.fixed_fused_linear_cross_entropy",
-        liger_fixed_fused_linear_cross_entropy_none_reduction,
-    )
-    ModelClass = AutoLigerKernelForCausalLM if use_liger_kernels else AutoModelForCausalLM
+    ModelClass = AutoModelForCausalLM
+    
+    # ensures liger is available when requested
+    if use_liger_kernels:
+        try:
+            from liger_kernel.transformers import AutoLigerKernelForCausalLM
+        except ImportError as e:
+            raise ImportError("Tried to use liger kernels, but they are not installed. Please make sure you have installed the necessary cuda dependencies, or disable liger kernels.") from e
+        else:
+            """need to patch the loss function to not reduce, so we can reduce across all GPUs"""
+            patch_target_module(
+                "liger_kernel.transformers.model.loss_utils.fixed_fused_linear_cross_entropy",
+                liger_fixed_fused_linear_cross_entropy_none_reduction,
+            )
+            ModelClass = AutoLigerKernelForCausalLM
 
     def load_standard_model():
         model = ModelClass.from_pretrained(**base_model_args)
