@@ -40,13 +40,13 @@ dependencies = [
     "pytest",
     "tox",
     "tox-uv",
-    "liger-kernel",  
-    "kernels"  # for flash-attention-3
 ]
 
 [project.optional-dependencies]
 cuda = [
     "flash-attn>=2.8.2",
+    "liger-kernel>=0.5.10",  
+    "kernels"  # for flash-attention-3
 ]
 test = [
     "pytest>=7.0",
