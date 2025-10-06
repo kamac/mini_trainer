@@ -266,7 +266,6 @@ def compute_validation_loss(model, val_data_loader, device):
     total_batches = len(val_data_loader)
     
     with torch.no_grad():
-        val_data_loader.sampler.set_epoch(0)  # Use epoch 0 for validation
         val_data_loader_it = iter(val_data_loader)
         
         # Create progress bar only on rank 0
