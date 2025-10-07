@@ -231,60 +231,71 @@ The project uses tox with uv for fast, isolated testing across multiple Python v
 
 ## Quick Testing
 
+First set up your environment:
+```shell
+# Create environment and install with dev dependencies
+uv venv --python=3.12
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+**Note**: We use direct `tox` commands instead of `uv run tox` to avoid dependency resolution issues with CUDA packages in nogpu test environments.
+
+Then run tests:
 ```shell
 # Run all tests
-uv run tox -e test
+tox -e test
 
 # Run tests with verbose output
-uv run tox -e test-verbose
+tox -e test-verbose
 
 # Run until first failure (fast feedback)
-uv run tox -e test-quick
+tox -e test-quick
 
 # Run with coverage report
-uv run tox -e test-coverage
+tox -e test-coverage
 ```
 
 ## Multi-Python Testing
 
 ```shell
 # Test on Python 3.11
-uv run tox -e py311
+tox -e py311
 
-# Test on Python 3.12  
-uv run tox -e py312
+# Test on Python 3.12
+tox -e py312
 
 # Test on all supported Python versions
-uv run tox
+tox
 ```
 
 ## Code Quality
 
 ```shell
 # Check code style with ruff
-uv run tox -e lint
+tox -e lint
 
 # Fix linting issues automatically
-uv run tox -e lint-fix
+tox -e lint-fix
 
 # Format code
-uv run tox -e format
+tox -e format
 
 # Check if code is formatted
-uv run tox -e format-check
+tox -e format-check
 ```
 
 ## Running Specific Tests
 
 ```shell
 # Run specific test file
-uv run tox -e test -- tests/test_batch_lengths_to_minibatches.py
+tox -e test -- tests/test_batch_lengths_to_minibatches.py
 
 # Run specific test class
-uv run tox -e test -- tests/test_batch_lengths_to_minibatches.py::TestBatchLengthsToMinibatches
+tox -e test -- tests/test_batch_lengths_to_minibatches.py::TestBatchLengthsToMinibatches
 
 # Run specific test method
-uv run tox -e test-quick -- tests/test_batch_lengths_to_minibatches.py::TestBatchLengthsToMinibatches::test_empty_batch
+tox -e test-quick -- tests/test_batch_lengths_to_minibatches.py::TestBatchLengthsToMinibatches::test_empty_batch
 ```
 
 ## Legacy Test Runner

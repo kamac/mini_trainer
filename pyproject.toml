@@ -48,7 +48,7 @@ cuda = [
     "flash-attn>=2.8.2",
     "liger-kernel>=0.5.10",  
     "kernels",  # for flash-attention-3
-    "mamba-ssm[causal-conv1d]"
+    "mamba-ssm[causal-conv1d]>=2.2.5"
 ]
 test = [
     "pytest>=7.0",
