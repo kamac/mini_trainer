@@ -26,18 +26,21 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync
-        uv pip install tox tox-uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
     
     - name: Display Python and package information
       run: |
+        source .venv/bin/activate
         python --version
-        uv run tox --version
+        tox --version
         which python
     
     - name: Run Python 3.12 non-GPU tests
       run: |
-        uv run tox -e py312-nogpu-cov
+        source .venv/bin/activate
+        tox -e py312-nogpu-cov
 
   test-py311:
     name: Python 3.11 Tests
@@ -60,20 +63,23 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync
-        uv pip install tox tox-uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
     
     - name: Display Python and package information
       run: |
+        source .venv/bin/activate
         python --version
-        uv run tox --version
+        tox --version
         which python
     
     - name: Run Python 3.11 non-GPU tests
       run: |
-        # we will still be able to print out the coverage in this run, it just 
+        source .venv/bin/activate
+        # we will still be able to print out the coverage in this run, it just
         # won't be able to upload it to codecov
-        uv run tox -e py311-nogpu-cov
+        tox -e py311-nogpu-cov
 
   test-coverage:
     name: Test with Coverage
@@ -96,18 +102,21 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync
-        uv pip install tox tox-uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
     
     - name: Display Python and package information
       run: |
+        source .venv/bin/activate
         python --version
-        uv run tox --version
+        tox --version
         which python
     
     - name: Run tests with coverage
       run: |
-        uv run tox -e py312-nogpu-cov
+        source .venv/bin/activate
+        tox -e py312-nogpu-cov
     
     - name: Upload coverage results to Codecov
       uses: codecov/codecov-action@v5
@@ -139,12 +148,14 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync
-        uv pip install tox tox-uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
     
     - name: Check code formatting
       run: |
-        uv run tox -e format-check
+        source .venv/bin/activate
+        tox -e format-check
 
   lint:
     name: Linting (Non-blocking)
@@ -168,12 +179,14 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync
-        uv pip install tox tox-uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
     
     - name: Run linting checks
       run: |
-        uv run tox -e lint
+        source .venv/bin/activate
+        tox -e lint
 
   # Summary job to ensure required tests pass
   tests-passed:
