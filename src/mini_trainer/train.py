@@ -1,13 +1,14 @@
 import time
 import os
+import sys
 from pathlib import Path
 import json
 from typing import Annotated, Literal
 from typer import Typer, Option
-from tqdm import tqdm
 
 from mini_trainer.async_structured_logger import AsyncStructuredLogger
 from mini_trainer import wandb_wrapper
+from tqdm import tqdm
 import torch
 import torch.distributed as dist
 from torch.distributed._tensor.api import DTensor as _DTensor  # works if DTensor is available
@@ -27,8 +28,7 @@ from mini_trainer.training_types import TrainingMode
 SaveType = Literal["min_samples", "epoch", "final", "best_val_loss"]
 
 app = Typer(
-    pretty_exceptions_show_locals=False,  # Hide local variables in tracebacks
-    pretty_exceptions_short=True   
+    pretty_exceptions_enable=False,  # disable rich exception formatting
 )
 
 def validate_training_state(model, optimizer, expected_param_dtype=torch.float32, expected_optimizer_dtype=torch.float32):
@@ -239,13 +239,12 @@ def save_model(
     log_rank_0(f"✅ Saved model at {samples_seen} samples{suffix_text} in {time.time() - start:.2f} seconds")
 
 def compute_validation_loss(model, val_data_loader, device):
-    """Compute validation loss on the validation dataset.
+    """Compute validation loss on the validation dataset with tqdm-styled progress bar.
     
     Args:
         model: The model to evaluate
         val_data_loader: Validation data loader
         device: Device to run evaluation on
-        world_size: Number of distributed processes
         
     Returns:
         dict: Dictionary containing validation metrics
@@ -265,22 +264,32 @@ def compute_validation_loss(model, val_data_loader, device):
     # Get total number of batches for progress bar
     total_batches = len(val_data_loader)
     
+    # Create tqdm with custom format matching Rich style
+    val_bar_format = (
+        '\033[1;35mValidation:\033[0m '
+        '{bar} '
+        '\033[33m{percentage:3.0f}%\033[0m │ '
+        '\033[37m{n}/{total}\033[0m'
+    )
+    val_pbar = tqdm(
+        total=total_batches,
+        bar_format=val_bar_format,
+        ncols=None,
+        leave=False,
+        position=0,
+        file=sys.stdout,
+        ascii='━╺─',  # custom characters matching Rich style
+        disable=True,  # disable auto-display, we'll manually format
+    )
+    
     with torch.no_grad():
         val_data_loader_it = iter(val_data_loader)
-        
-        # Create progress bar only on rank 0
-        pbar = tqdm(
-            total=total_batches,
-            desc="Validation",
-            disable=not is_main_process,
-            unit="batch"
-        )
         
         # For simplicity, we pack the batches needed for computing validation
         # loss in the same way as happens in training. As a result, it will
         # be collated in the same way: Each minibatch consists of at most `batch_size`
         # samples, which are then split into (num_gpus * grad_accum) pieces. 
-        for batch in val_data_loader_it:
+        for val_batch_idx, batch in enumerate(val_data_loader_it, 1):
             val_batch_totals.reset_batch()
 
             # Loss is accumulated WRT to the global number of samples; i.e.
@@ -325,17 +334,28 @@ def compute_validation_loss(model, val_data_loader, device):
             assert len(batch) > 0, "validation batch was empty"
             total_num_tokens += batch[0]['batch_num_loss_counted_tokens']
             
-            # Update progress bar with current loss
+            # Print tqdm-styled validation progress
             if is_main_process:
                 current_loss = total_overall_loss / total_num_tokens if total_num_tokens > 0 else 0.0
-                pbar.set_postfix({'loss': f'{current_loss:.4f}'})
-                pbar.update(1)
+                val_pbar.n = val_batch_idx
+                
+                # Manually format the complete progress line with loss metric using format_meter
+                bar_str = val_pbar.format_meter(
+                    n=val_batch_idx,
+                    total=total_batches,
+                    elapsed=0,
+                    ncols=None,
+                    bar_format=val_bar_format,
+                    ascii='━╺─',
+                )
+                
+                # Add the loss metric
+                metrics_str = f" │ \033[32mloss:\033[0m \033[37m{current_loss:.4f}\033[0m"
+                
+                # Print the complete line
+                print(bar_str + metrics_str, file=sys.stdout, flush=True)
             
             dist.barrier()
-        
-        # Close progress bar
-        if is_main_process:
-            pbar.close()
     
     # Calculate average validation metrics and synchronize across all processes
     vbm = val_batch_totals.totals
@@ -694,6 +714,7 @@ def train(
         # set the current epoch
         data_loader.sampler.set_epoch(epoch)
         data_loader_it = iter(data_loader)
+
         for batch in data_loader_it:
             batch_start_time = time.time()
             batch_totals.reset_batch()
@@ -751,6 +772,7 @@ def train(
             batch_metrics = {
                     "step": step,
                     "epoch": epoch,
+                    "steps_per_epoch": len(data_loader),
                     "lr": lr_scheduler.get_last_lr()[0],
                     "grad_norm": grad_norm.item(),
                     "loss": bm['loss']/batch_num_loss_counted_tokens,
@@ -763,9 +785,9 @@ def train(
                     "avg_time_per_minibatch": bm['time_per_minibatch']/(grad_accum+1)/world_size,
                     "time_per_batch": batch_time,
                     "tokens_per_second": bm['num_total_tokens']/batch_time,
-                    "total_samples_accumulated": total_samples_accumulated, 
+                    "total_samples_accumulated": total_samples_accumulated,
                     "total_tokens_accumulated": total_tokens_processed,
-                    "samples_per_second": bm['num_samples']/batch_time,
+                    "samples_per_second": bm['num_samples']/batch_time if batch_time > 0 else 0.0,
                     "peak_memory_usage_GB": float(torch.cuda.max_memory_allocated() / 1e9),
                     'val_loss': last_validation_loss,
                 }
@@ -777,13 +799,13 @@ def train(
                     print(f"Validation loss: {last_validation_loss}")
                 batch_metrics.update(val_metrics)
 
+            # Log metrics (progress info is printed by the logger)
             if is_local_main_process:
-                metric_logger.log_sync(
-                    batch_metrics
-                )
+                metric_logger.log_sync(batch_metrics)
+
 
             torch.distributed.barrier()
-            
+
             # sample-based saving, keep in the inner loop
             if checkpointer.should_save_checkpoint(
                 save_type="min_samples",
@@ -791,7 +813,7 @@ def train(
             ):
                 save_model(model, total_samples_accumulated, output_dir, model_name_or_path)
                 checkpointer.record_save("min_samples", total_samples_accumulated)
-                
+
             # Check for best validation loss saving after validation runs
             if checkpointer.should_save_checkpoint(
                 save_type="best_val_loss",
@@ -800,7 +822,7 @@ def train(
             ):
                 save_model(model, total_samples_accumulated, output_dir, model_name_or_path, suffix="best_val_loss")
                 checkpointer.record_save("best_val_loss", total_samples_accumulated, last_validation_loss)
-            
+
             torch.distributed.barrier()
 
             # Check stopping condition after each step (for STEP and TOKEN modes)
@@ -814,7 +836,7 @@ def train(
                 max_tokens=max_tokens
             ):
                 break
-        
+
         # Increment epoch counter after completing an epoch
         epoch += 1
         
