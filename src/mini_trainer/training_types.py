@@ -7,7 +7,7 @@ used across the mini_trainer package to avoid duplication and ensure consistency
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 
 
 class TrainingMode(str, Enum):
@@ -22,11 +22,24 @@ class TrainingMode(str, Enum):
 class TorchrunArgs:
     """Arguments for torchrun distributed training configuration."""
     nnodes: int = 1
-    nproc_per_node: int = 1
+    nproc_per_node: Literal["gpu"] | int = 1
     node_rank: int = 0
-    rdzv_id: int = 123
-    rdzv_endpoint: str = "127.0.0.1:1738"
+    rdzv_id: str | int = 123
 
+    # Optional rendezvous / master fields
+    rdzv_endpoint: Optional[str] = None
+    master_addr: Optional[str] = None
+    master_port: Optional[int] = None
+
+    def __post_init__(self):
+        # in order to support systems which are still relying on `master_addr`
+        # to construct the rendezvous address, torchrun must not be given a non-empty value
+        # for rdzv_endpoint:
+        # https://github.com/pytorch/pytorch/blob/ecb53078faf86ca1b33277df33b82985675bb011/torch/distributed/run.py#L799
+        if self.rdzv_endpoint and self.master_addr: 
+            raise ValueError(
+                "Provide either `rdzv_endpoint` OR both `master_addr` and `master_port`, not both."
+            )
 
 @dataclass
 class TrainingArgs:

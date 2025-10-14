@@ -85,14 +85,34 @@ def run_training(torch_args: TorchrunArgs, train_args: TrainingArgs) -> None:
     
     # Build torchrun command
     train_script = Path(__file__).parent / "train.py"
-    
+
     command = [
         "torchrun",
         f"--nnodes={torch_args.nnodes}",
-        f"--node_rank={torch_args.node_rank}",
-        f"--nproc_per_node={torch_args.nproc_per_node}",
-        f"--rdzv_id={torch_args.rdzv_id}",
-        f"--rdzv_endpoint={torch_args.rdzv_endpoint}",
+        f"--node-rank={torch_args.node_rank}",
+        f"--nproc-per-node={torch_args.nproc_per_node}",
+        f"--rdzv-id={torch_args.rdzv_id}",
+    ]
+
+    if torch_args.master_addr and torch_args.rdzv_endpoint:
+        raise ValueError("Provide either `rdzv_endpoint` OR `master_addr`, not both.")
+
+    if torch_args.master_addr:
+        # master-addr + master-port are only compatible with the static backend
+        # so here we pass it explicitly
+        command += [
+            f"--master-addr={torch_args.master_addr}",
+            "--rdzv-backend=static"
+        ]
+        if torch_args.master_port:
+            command += [f"--master-port={torch_args.master_port}"]
+
+    elif torch_args.rdzv_endpoint:
+        command += [f"--rdzv-endpoint={torch_args.rdzv_endpoint}"]
+    else:
+        command += ["--standalone"]
+
+    command.extend([
         str(train_script),
         f"--model-name-or-path={train_args.model_name_or_path}",
         f"--data-path={train_args.data_path}",
@@ -109,7 +129,7 @@ def run_training(torch_args: TorchrunArgs, train_args: TrainingArgs) -> None:
         f"--max-steps={train_args.max_steps}",
         f"--max-tokens={train_args.max_tokens}",
         f"--train-dtype={train_args.train_dtype}",
-    ]
+    ])
 
     
     # wandb-related arguments
