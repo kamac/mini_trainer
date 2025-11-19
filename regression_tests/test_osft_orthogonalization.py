@@ -196,6 +196,7 @@ def compute_angle_differences(A: torch.Tensor, B: torch.Tensor = None, top_n: in
         return top_diffs.cpu().tolist()
 
     except Exception as e:
+        print(f"Error computing angle differences: {e}")
         return []
 
 
@@ -357,7 +358,6 @@ def test_osft_orthogonalization(
         osft_upcast_dtype=torch.float32,
         osft_rank_ratio=osft_rank_ratio,
         use_liger_kernels=False,
-        osft_memory_efficient_init=False,
     )
 
     # Verify it's an OSFT model
