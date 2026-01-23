@@ -32,6 +32,73 @@ OSFT_CACHE_CLEAR_INTERVAL = int(
 )  # Clear GPU cache every N parameters during matrix reconstruction
 
 
+def _supports_use_batch() -> bool:
+    """Check if torch.distributed send/recv_object_list support the use_batch parameter (PyTorch 2.9+)."""
+    # Try signature probe first (handles nightly/backported builds accurately)
+    try:
+        import inspect
+
+        sig = inspect.signature(dist.send_object_list)
+        return "use_batch" in sig.parameters
+    except (TypeError, ValueError, AttributeError):
+        pass
+
+    # Fall back to version parsing
+    try:
+        version_parts = torch.__version__.split(".")[:2]
+        major, minor = (
+            int(version_parts[0]),
+            int(
+                version_parts[1]
+                .split("+")[0]
+                .split("a")[0]
+                .split("b")[0]
+                .split("rc")[0]
+            ),
+        )
+        return (major, minor) >= (2, 9)
+    except (ValueError, IndexError):
+        return False
+
+
+# Cache the check since it won't change during runtime
+_USE_BATCH_SUPPORTED: bool | None = None
+
+
+def _get_use_batch_supported() -> bool:
+    """Get cached result of whether use_batch is supported."""
+    global _USE_BATCH_SUPPORTED
+    if _USE_BATCH_SUPPORTED is None:
+        _USE_BATCH_SUPPORTED = _supports_use_batch()
+    return _USE_BATCH_SUPPORTED
+
+
+def send_object_list_compat(
+    object_list: list, dst: int, group=None, use_batch: bool = False
+) -> None:
+    """
+    Version-compatible wrapper for torch.distributed.send_object_list.
+    Passes use_batch parameter on PyTorch 2.9+ when specified.
+    """
+    if _get_use_batch_supported():
+        dist.send_object_list(object_list, dst=dst, group=group, use_batch=use_batch)
+    else:
+        dist.send_object_list(object_list, dst=dst, group=group)
+
+
+def recv_object_list_compat(
+    object_list: list, src: int, group=None, use_batch: bool = False
+) -> None:
+    """
+    Version-compatible wrapper for torch.distributed.recv_object_list.
+    Passes use_batch parameter on PyTorch 2.9+ when specified.
+    """
+    if _get_use_batch_supported():
+        dist.recv_object_list(object_list, src=src, group=group, use_batch=use_batch)
+    else:
+        dist.recv_object_list(object_list, src=src, group=group)
+
+
 Role = t.Literal["osft_target", "non_osft"]
 
 
@@ -1265,7 +1332,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                 #   non-main proc: receives the data and prepares to process it in the next step
                 if is_main_proc:
                     mailbox = [assignment]
-                    dist.send_object_list(
+                    send_object_list_compat(
                         mailbox, dst=target_rank, use_batch=True, group=control_pg
                     )
 
@@ -1286,7 +1353,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
 
                 elif target_rank == current_rank:
                     # target ranks sends
-                    dist.recv_object_list(
+                    recv_object_list_compat(
                         mailbox, src=main_proc_rank, use_batch=True, group=control_pg
                     )
                     my_work = mailbox.pop()
@@ -1331,7 +1398,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
                 mailbox = [None]
                 if sender_rank == current_rank:
                     mailbox = [processed_svd_dicts]
-                    dist.send_object_list(
+                    send_object_list_compat(
                         mailbox, dst=main_proc_rank, use_batch=True, group=control_pg
                     )
 
@@ -1348,7 +1415,7 @@ def create_osft_model_class(base_cls) -> type[OSFTModel]:
 
                 # main process receives
                 elif is_main_proc:
-                    dist.recv_object_list(
+                    recv_object_list_compat(
                         mailbox, src=sender_rank, use_batch=True, group=control_pg
                     )
                     gathered_results.update(mailbox.pop())
