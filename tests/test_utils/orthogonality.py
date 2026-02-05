@@ -8,15 +8,16 @@ Extracted from regression_tests/test_osft_orthogonalization.py for use
 in unit tests that don't require full-scale distributed training.
 """
 
-import torch
 import math
-from typing import Dict, List
 from dataclasses import dataclass
+
+import torch
 
 
 @dataclass
 class OrthogonalityMetrics:
     """Stores metrics for a single orthogonality check."""
+
     param_name: str
     check_type: str  # 'U_grad', 'V_grad', 'U_param', 'V_param'
     max_angle_diff: float  # in degrees
@@ -28,7 +29,7 @@ class OrthogonalityTracker:
 
     def __init__(self, margin_deg: float = 1.0):
         self.margin_deg = margin_deg
-        self.metrics: Dict[str, Dict[str, OrthogonalityMetrics]] = {}
+        self.metrics: dict[str, dict[str, OrthogonalityMetrics]] = {}
         self.total_checks = 0
         self.failed_checks = 0
 
@@ -43,30 +44,26 @@ class OrthogonalityTracker:
 
         if key not in self.metrics:
             self.metrics[key] = {
-                'param_name': param_name,
-                'check_type': check_type,
-                'max_angle_diff': max_angle_diff,
-                'step': step
+                "param_name": param_name,
+                "check_type": check_type,
+                "max_angle_diff": max_angle_diff,
+                "step": step,
             }
         else:
             # Update if this is worse
-            if max_angle_diff > self.metrics[key]['max_angle_diff']:
-                self.metrics[key]['max_angle_diff'] = max_angle_diff
-                self.metrics[key]['step'] = step
+            if max_angle_diff > self.metrics[key]["max_angle_diff"]:
+                self.metrics[key]["max_angle_diff"] = max_angle_diff
+                self.metrics[key]["step"] = step
 
-    def get_top_violations(self, n: int = 5) -> List[Dict]:
+    def get_top_violations(self, n: int = 5) -> list[dict]:
         """Get top N worst violations."""
-        sorted_metrics = sorted(
-            self.metrics.values(),
-            key=lambda x: x['max_angle_diff'],
-            reverse=True
-        )
+        sorted_metrics = sorted(self.metrics.values(), key=lambda x: x["max_angle_diff"], reverse=True)
         return sorted_metrics[:n]
 
     def is_successful(self) -> bool:
         """Check if all measurements passed."""
         for metric in self.metrics.values():
-            if metric['max_angle_diff'] > self.margin_deg:
+            if metric["max_angle_diff"] > self.margin_deg:
                 return False
         return True
 
@@ -102,7 +99,7 @@ class OrthogonalityTracker:
         return "\n".join(lines)
 
 
-def compute_angle_differences(A: torch.Tensor, B: torch.Tensor = None, top_n: int = 5) -> List[float]:
+def compute_angle_differences(A: torch.Tensor, B: torch.Tensor = None, top_n: int = 5) -> list[float]:
     """
     Compute angle differences between matrices A and B, returning the top N worst deviations from orthogonality.
 
@@ -172,12 +169,7 @@ def compute_angle_differences(A: torch.Tensor, B: torch.Tensor = None, top_n: in
         return []
 
 
-def check_gradient_orthogonality(
-    model,
-    module,
-    step: int,
-    tracker: OrthogonalityTracker
-) -> None:
+def check_gradient_orthogonality(model, module, step: int, tracker: OrthogonalityTracker) -> None:
     """
     Check if gradients of U_low and V_low are orthogonal to U_high and V_high.
 
@@ -201,36 +193,30 @@ def check_gradient_orthogonality(
 
     # we need to pull the gradients out before casting these variables to full_tensor,
     # since `.full_tensor` doesn't return a tensor with the .grad attribute populated
-    dU_low = U_low.grad.full_tensor() if hasattr(U_low.grad, 'full_tensor') else U_low.grad
-    dV_low = V_low.grad.full_tensor() if hasattr(V_low.grad, 'full_tensor') else V_low.grad
+    dU_low = U_low.grad.full_tensor() if hasattr(U_low.grad, "full_tensor") else U_low.grad
+    dV_low = V_low.grad.full_tensor() if hasattr(V_low.grad, "full_tensor") else V_low.grad
 
-    if hasattr(U_high, 'full_tensor'):
+    if hasattr(U_high, "full_tensor"):
         U_high = U_high.full_tensor()
-    if hasattr(V_high, 'full_tensor'):
+    if hasattr(V_high, "full_tensor"):
         V_high = V_high.full_tensor()
-    if hasattr(U_low, 'full_tensor'):
+    if hasattr(U_low, "full_tensor"):
         U_low = U_low.full_tensor()
-    if hasattr(V_low, 'full_tensor'):
+    if hasattr(V_low, "full_tensor"):
         V_low = V_low.full_tensor()
-
 
     # Check U gradient orthogonality
     u_grad_diffs = compute_angle_differences(U_high, dU_low, top_n=1)
     if u_grad_diffs:
-        tracker.update(safe_name, 'U_grad', u_grad_diffs[0], step)
+        tracker.update(safe_name, "U_grad", u_grad_diffs[0], step)
 
     # Check V gradient orthogonality
     v_grad_diffs = compute_angle_differences(V_high.T, dV_low.T, top_n=1)
     if v_grad_diffs:
-        tracker.update(safe_name, 'V_grad', v_grad_diffs[0], step)
+        tracker.update(safe_name, "V_grad", v_grad_diffs[0], step)
 
 
-def check_parameter_orthogonality(
-    model,
-    module,
-    step: int,
-    tracker: OrthogonalityTracker
-) -> None:
+def check_parameter_orthogonality(model, module, step: int, tracker: OrthogonalityTracker) -> None:
     """
     Check if post-update U_low and V_low are orthogonal to U_high and V_high.
 
@@ -250,21 +236,21 @@ def check_parameter_orthogonality(
     # get the safe_name for tracking
     safe_name = module.osft_params.safe_name
 
-    if hasattr(U_high, 'full_tensor'):
+    if hasattr(U_high, "full_tensor"):
         U_high = U_high.full_tensor()
-    if hasattr(V_high, 'full_tensor'):
+    if hasattr(V_high, "full_tensor"):
         V_high = V_high.full_tensor()
-    if hasattr(U_low, 'full_tensor'):
+    if hasattr(U_low, "full_tensor"):
         U_low = U_low.full_tensor()
-    if hasattr(V_low, 'full_tensor'):
+    if hasattr(V_low, "full_tensor"):
         V_low = V_low.full_tensor()
 
     # Check U parameter orthogonality
     u_param_diffs = compute_angle_differences(U_high, U_low, top_n=1)
     if u_param_diffs:
-        tracker.update(safe_name, 'U_param', u_param_diffs[0], step)
+        tracker.update(safe_name, "U_param", u_param_diffs[0], step)
 
     # Check V parameter orthogonality
     v_param_diffs = compute_angle_differences(V_high.T, V_low.T, top_n=1)
     if v_param_diffs:
-        tracker.update(safe_name, 'V_param', v_param_diffs[0], step)
+        tracker.update(safe_name, "V_param", v_param_diffs[0], step)

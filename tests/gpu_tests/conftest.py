@@ -1,8 +1,10 @@
 """Pytest configuration for GPU tests."""
-import pytest
-import torch
+
 import sys
 from pathlib import Path
+
+import pytest
+import torch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -10,9 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 def pytest_configure(config):
     """Add custom markers for GPU tests."""
-    config.addinivalue_line(
-        "markers", "gpu: marks tests as requiring GPU (deselect with '-m \"not gpu\"')"
-    )
+    config.addinivalue_line("markers", "gpu: marks tests as requiring GPU (deselect with '-m \"not gpu\"')")
 
 
 @pytest.fixture(scope="session")
@@ -34,6 +34,7 @@ def flash_attn_available():
     """Check if flash attention is available."""
     try:
         import flash_attn as _  # noqa: F401
+
         return True
     except ImportError:
         return False

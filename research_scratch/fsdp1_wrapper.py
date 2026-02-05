@@ -4,19 +4,18 @@ This is kept for research/experimentation purposes.
 """
 
 import functools
+
 import torch
-import torch.distributed as dist
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+    MixedPrecision,
+)
 from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from torch.distributed.fsdp import MixedPrecision
-
 from utils import log_rank_0
 
 
-def get_module_class_from_name(
-    model: torch.nn.Module, name: str
-) -> torch.nn.Module | None:
+def get_module_class_from_name(model: torch.nn.Module, name: str) -> torch.nn.Module | None:
     modules_children = list(model.children())
 
     if model.__class__.__name__ == name:
@@ -37,27 +36,24 @@ def wrap_fsdp1(model: torch.nn.Module) -> torch.nn.Module:
     # Enable gradient checkpointing for FSDP1 (HuggingFace style)
     log_rank_0("FSDP1: Enabling gradient checkpointing")
     model.gradient_checkpointing_enable()
-    
+
     # Determine the block class to auto-wrap (first no-split module)
     block_name = model._no_split_modules[0]
     block_cls = get_module_class_from_name(model, block_name)
     if block_cls is None:
         raise ValueError(f"Could not find module class named {block_name}")
     log_rank_0(f"FSDP1: Block class: {block_cls}")
-    
+
     # Create auto-wrap policy using functools.partial
-    auto_wrap_policy = functools.partial(
-        transformer_auto_wrap_policy,
-        transformer_layer_cls={block_cls}
-    )
-    
+    auto_wrap_policy = functools.partial(transformer_auto_wrap_policy, transformer_layer_cls={block_cls})
+
     # Mixed-precision policy for BF16
     mixed_precision = MixedPrecision(
         param_dtype=torch.bfloat16,
         reduce_dtype=torch.bfloat16,
         buffer_dtype=torch.bfloat16,
     )
-    
+
     # FSDP1 wrapping
     fsdp_model = FSDP(
         model,
@@ -68,6 +64,6 @@ def wrap_fsdp1(model: torch.nn.Module) -> torch.nn.Module:
         # sync_module_states=True,
         # use_orig_params=True,
     )
-    
+
     log_rank_0("FSDP1 wrapping completed!")
     return fsdp_model
