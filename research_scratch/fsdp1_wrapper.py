@@ -38,7 +38,9 @@ def wrap_fsdp1(model: torch.nn.Module) -> torch.nn.Module:
     model.gradient_checkpointing_enable()
 
     # Determine the block class to auto-wrap (first no-split module)
-    block_name = model._no_split_modules[0]
+    if not model._no_split_modules:
+        raise ValueError("model._no_split_modules is empty; cannot determine FSDP block class")
+    block_name = next(iter(model._no_split_modules))
     block_cls = get_module_class_from_name(model, block_name)
     if block_cls is None:
         raise ValueError(f"Could not find module class named {block_name}")
