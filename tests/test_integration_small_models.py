@@ -27,14 +27,8 @@ from transformers import (
     Qwen2ForCausalLM,
 )
 
-from mini_trainer.osft_utils import (
-    auto_generate_target_osft_config,
-    create_osft_model_class,
-)
-from mini_trainer.setup_model_for_training import (
-    align_model_and_tokenizer,
-    setup_training_components,
-)
+from mini_trainer.osft_utils import auto_generate_target_osft_config, create_osft_model_class
+from mini_trainer.setup_model_for_training import align_model_and_tokenizer, setup_training_components
 
 
 # TODO: add tests to validate our codebase works with these models

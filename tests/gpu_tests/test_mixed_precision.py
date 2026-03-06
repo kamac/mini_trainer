@@ -85,9 +85,7 @@ class TestMixedPrecisionDtypes:
             tokenizer.save_pretrained(model_path)
 
             # Patch loss function for none reduction
-            from mini_trainer.none_reduction_losses import (
-                hf_fixed_cross_entropy_none_reduction,
-            )
+            from mini_trainer.none_reduction_losses import hf_fixed_cross_entropy_none_reduction
 
             patch_target_module(
                 "transformers.loss.loss_utils.fixed_cross_entropy",

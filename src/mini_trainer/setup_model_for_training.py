@@ -7,13 +7,8 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    checkpoint_wrapper as ptd_checkpoint_wrapper,
-)
-from torch.distributed.checkpoint.state_dict import (
-    StateDictOptions,
-    set_model_state_dict,
-)
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper as ptd_checkpoint_wrapper
+from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
 from transformers import AutoConfig, AutoTokenizer, Mxfp4Config
@@ -26,16 +21,15 @@ from mini_trainer.fsdp2_lazy_init import (
     set_fsdp2_lazy_init_mode,
 )
 from mini_trainer.gpt_oss_utils import freeze_router_params, is_gpt_oss_model
-from mini_trainer.osft_utils import (
-    OSFTModel,
-    _build_osft_kwargs,
-    _set_osft_dtypes,
-    create_osft_model_class,
-)
-from mini_trainer.utils import (
-    get_model_class_from_config,
-    log_rank_0,
-    patch_target_module,
+from mini_trainer.osft_utils import OSFTModel, _build_osft_kwargs, _set_osft_dtypes, create_osft_model_class
+from mini_trainer.utils import get_model_class_from_config, log_rank_0, patch_target_module
+from mini_trainer.vlm_utils import (
+    extract_causal_lm_from_vlm,
+    has_timm_vision_tower,
+    is_vlm_for_direct_loading,
+    is_vlm_with_causal_lm,
+    load_vlm_for_text_training,
+    needs_sdpa,
 )
 
 
@@ -66,10 +60,7 @@ def _apply_liger_kernels_if_requested(use_liger_kernels, model_config, base_mode
         return
 
     try:
-        from liger_kernel.transformers.monkey_patch import (
-            MODEL_TYPE_TO_APPLY_LIGER_FN,
-            _apply_liger_kernel,
-        )
+        from liger_kernel.transformers.monkey_patch import MODEL_TYPE_TO_APPLY_LIGER_FN, _apply_liger_kernel
     except ImportError as e:
         raise ImportError(
             "Tried to use liger kernels for OSFT, but they are not installed. "
@@ -438,8 +429,17 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
             print(f"WARNING: Failed to disable HuggingFace cache for model {model.__class__.__name__}: {e}")
 
     # Find the transformer block container
-    # Support common architectures: Llama (model.layers), GPT-2 (transformer.h)
-    if hasattr(model, "model") and hasattr(model.model, "layers"):
+    # Support common architectures:
+    #   - VLM direct load (model.model.language_model.layers) e.g. Qwen3-VL
+    #   - Llama-style (model.model.layers)
+    #   - GPT-2-style (transformer.h)
+    if (
+        hasattr(model, "model")
+        and hasattr(model.model, "language_model")
+        and hasattr(model.model.language_model, "layers")
+    ):
+        layers = model.model.language_model.layers
+    elif hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers
     elif hasattr(model, "transformer") and hasattr(model.transformer, "h"):
         layers = model.transformer.h
@@ -449,11 +449,19 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
             "This likely means we need to update the code to support this model."
         )
 
-    # Apply activation checkpointing to each block
-    log_rank_0(f"🔄 [Phase 2] Applying activation checkpointing to {len(layers)} blocks")
-    for idx, block in enumerate(layers):
-        # preserve_rng_state needs to be true so that the backward pass can be accurate
-        layers[idx] = ptd_checkpoint_wrapper(block, preserve_rng_state=True)
+    # Apply activation checkpointing to each block.
+    # VLM models (detected by language_model path) may have non-deterministic
+    # tensor counts during reentrant recomputation (e.g., M-RoPE), so we skip
+    # activation checkpointing for them. This uses more memory but avoids
+    # CheckpointError from tensor count mismatches.
+    is_vlm_direct = hasattr(model, "model") and hasattr(model.model, "language_model")
+    if is_vlm_direct:
+        log_rank_0(f"🔄 [Phase 2] Skipping activation checkpointing for VLM ({len(layers)} blocks)")
+    else:
+        log_rank_0(f"🔄 [Phase 2] Applying activation checkpointing to {len(layers)} blocks")
+        for idx, block in enumerate(layers):
+            # preserve_rng_state needs to be true so that the backward pass can be accurate
+            layers[idx] = ptd_checkpoint_wrapper(block, preserve_rng_state=True)
 
     # Build 1D device mesh over all ranks
     world_size = dist.get_world_size()
@@ -577,12 +585,21 @@ def finalize_model_initialization(model: torch.nn.Module, context: ModelInitiali
     return model
 
 
+def _get_text_config(model):
+    """Get the text-relevant config, falling back to text_config for VLMs."""
+    config = model.config
+    if not hasattr(config, "vocab_size") and hasattr(config, "text_config"):
+        return config.text_config
+    return config
+
+
 def align_model_and_tokenizer(model, tokenizer):
     """
     Aligns the model's vocabulary and special tokens with the tokenizer.
     """
-    if len(tokenizer) > model.config.vocab_size:
-        print(f"WARNING: tokenizer has {len(tokenizer)} tokens but model has {model.config.vocab_size} vocab size")
+    text_config = _get_text_config(model)
+    if len(tokenizer) > text_config.vocab_size:
+        print(f"WARNING: tokenizer has {len(tokenizer)} tokens but model has {text_config.vocab_size} vocab size")
         model.resize_token_embeddings(
             int(8 * math.ceil(len(tokenizer) / 8.0))
         )  # make the vocab size multiple of 8 for sharding the embedding layer.
@@ -603,8 +620,8 @@ def align_model_and_tokenizer(model, tokenizer):
                 "Cannot proceed with training - please configure the tokenizer properly."
             )
 
-    # Step 2: Sync all special tokens from tokenizer to model.config
-    # This ensures model.config always reflects tokenizer's special tokens
+    # Step 2: Sync all special tokens from tokenizer to text_config
+    # This ensures the config always reflects tokenizer's special tokens
     special_tokens = {
         "pad": ("pad_token_id", "Syncing model pad token id"),
         "bos": ("bos_token_id", "Syncing model bos token id"),
@@ -612,13 +629,13 @@ def align_model_and_tokenizer(model, tokenizer):
     }
 
     for token_type, (token_attr, message) in special_tokens.items():
-        model_token = getattr(model.config, token_attr)
+        model_token = getattr(text_config, token_attr, None)
         tokenizer_token = getattr(tokenizer, token_attr)
 
-        # Always sync tokenizer -> model.config when tokenizer has a valid value
+        # Always sync tokenizer -> config when tokenizer has a valid value
         if tokenizer_token is not None and model_token != tokenizer_token:
             log_rank_0(f"{message}: {model_token} -> {tokenizer_token}")
-            setattr(model.config, token_attr, tokenizer_token)
+            setattr(text_config, token_attr, tokenizer_token)
 
     return model
 
@@ -674,7 +691,7 @@ def get_model_save_dtype(save_dtype: str | torch.dtype | None, model_name_or_pat
         return original_dtype
 
     # by now we know that we are going to use a custom data type, so we just validate
-    if not isinstance(save_dtype, (str, torch.dtype)):
+    if not isinstance(save_dtype, str | torch.dtype):
         raise ValueError(f"error: could not recognize '{save_dtype}' as a supported dtype for saving model checkpoints")
 
     # convert dtype to a str
@@ -817,12 +834,24 @@ def setup_sft_model_distributed(
     state_dict = None
     buffer_dict = None
 
+    # Check if this is a VLM wrapping a CausalLM text backbone, or a direct VLM
+    _model_config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
+    is_vlm = is_vlm_with_causal_lm(_model_config)
+    is_direct_vlm = is_vlm_for_direct_loading(_model_config)
+
     if dist.get_rank() == 0:
         log_rank_0("rank 0: loading model to CPU")
         try:
             with torch.no_grad():
-                # Default load targets CPU when no device_map or accelerate is present
-                cpu_model = ModelClass.from_pretrained(**base_model_args)
+                if is_vlm:
+                    # VLM model: load full VLM and extract CausalLM text backbone
+                    cpu_model = extract_causal_lm_from_vlm(model_name_or_path, base_model_args)
+                elif is_direct_vlm:
+                    # VLM with no CausalLM class: load directly for text-only training
+                    cpu_model = load_vlm_for_text_training(model_name_or_path, base_model_args)
+                else:
+                    # Standard CausalLM: load directly
+                    cpu_model = ModelClass.from_pretrained(**base_model_args)
                 cpu_model = align_model_and_tokenizer(cpu_model, tokenizer)
                 config = cpu_model.config
                 state_dict = cpu_model.state_dict()
@@ -845,8 +874,14 @@ def setup_sft_model_distributed(
 
     # All ranks: Create model on meta device
     log_rank_0("creating model on meta device")
-    with torch.device("meta"):
-        model = ModelClass.from_config(config)
+    if is_direct_vlm:
+        from transformers import AutoModelForImageTextToText
+
+        with torch.device("meta"):
+            model = AutoModelForImageTextToText.from_config(config)
+    else:
+        with torch.device("meta"):
+            model = ModelClass.from_config(config)
 
     # Align model with tokenizer
     model = align_model_and_tokenizer(model, tokenizer)
@@ -882,6 +917,28 @@ def setup_model(
     model_config = AutoConfig.from_pretrained(model_name_or_path)
     is_gpt_oss = is_gpt_oss_model(model_config)
 
+    # Pre-populate the transformers Hub kernel cache with locally installed
+    # mamba_ssm and causal_conv1d packages. The Hub kernel versions may be
+    # compiled against a different PyTorch/CUDA build, causing runtime errors.
+    # Using local packages ensures ABI compatibility.
+    if getattr(model_config, "model_type", None) == "granitemoehybrid":
+        try:
+            import causal_conv1d
+            import mamba_ssm
+            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+            from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+            from transformers.integrations.hub_kernels import _KERNEL_MODULE_MAPPING
+
+            mamba_ssm.selective_state_update = selective_state_update
+            mamba_ssm.mamba_chunk_scan_combined = mamba_chunk_scan_combined
+            mamba_ssm.mamba_split_conv1d_scan_combined = mamba_split_conv1d_scan_combined
+
+            _KERNEL_MODULE_MAPPING["causal-conv1d"] = causal_conv1d
+            _KERNEL_MODULE_MAPPING["mamba-ssm"] = mamba_ssm
+            log_rank_0("Using local mamba_ssm/causal_conv1d instead of Hub kernels")
+        except (ImportError, AttributeError) as e:
+            log_rank_0(f"Could not patch mamba kernels ({e}); GraniteMoeHybrid may use Hub kernels")
+
     # Set up quantization config for GPT-OSS models
     if is_gpt_oss:
         try:
@@ -896,21 +953,52 @@ def setup_model(
         except ImportError:
             log_rank_0("⚠️ GPT-OSS model detected but Mxfp4Config not available - using default config")
 
-    # Check if flash_attn is available and set appropriate attention implementation
-    try:
-        import flash_attn as _  # noqa: F401
+    # Check if model requires SDPA instead of Flash Attention 2.
+    # This covers M-RoPE models (3D position_ids) and models with timm vision
+    # towers (TimmWrapperModel rejects flash_attention_2).
+    _needs_sdpa = needs_sdpa(model_config)
 
-        if is_gpt_oss:
-            base_model_args["attn_implementation"] = "kernels-community/vllm-flash-attn3"
-            log_rank_0("Set attention implementation to vllm-flash-attn3 for GPT-OSS")
-        else:
-            base_model_args["attn_implementation"] = "flash_attention_2"
+    # Handle models that need SDPA (doesn't require flash_attn)
+    if _needs_sdpa:
+        base_model_args["attn_implementation"] = "sdpa"
+        log_rank_0(f"Using SDPA for {model_name_or_path} (model incompatible with Flash Attention 2)")
+    else:
+        # Check if flash_attn is available for non-SDPA models
+        try:
+            import flash_attn as _
 
-    except ImportError as e:
-        if os.environ.get("TESTING", "false").lower() == "true":
-            base_model_args["attn_implementation"] = "sdpa"
-        else:
-            raise e
+            if is_gpt_oss:
+                # vllm-flash-attn3 requires Hopper (SM 9.0+) GPUs;
+                # GPT-OSS only supports flash-attn3 or eager
+                major, _ = torch.cuda.get_device_capability(0)
+                if major >= 9:
+                    base_model_args["attn_implementation"] = "kernels-community/vllm-flash-attn3"
+                    log_rank_0("Set attention implementation to vllm-flash-attn3 for GPT-OSS")
+                else:
+                    base_model_args["attn_implementation"] = "eager"
+                    log_rank_0(
+                        f"GPT-OSS: flash-attn3 requires Hopper (SM 9.0+) GPUs, "
+                        f"but found SM {major}.x. Using eager attention instead."
+                    )
+            else:
+                base_model_args["attn_implementation"] = "flash_attention_2"
+
+        except ImportError as e:
+            if os.environ.get("TESTING", "false").lower() == "true":
+                base_model_args["attn_implementation"] = "sdpa"
+            else:
+                raise e
+
+    # For models with timm vision towers: set vision config to eager
+    # while keeping the text model's attention implementation.
+    # timm's TimmWrapperModel rejects both FA2 and SDPA.
+    if has_timm_vision_tower(model_config):
+        attn_impl = base_model_args.get("attn_implementation", "flash_attention_2")
+        base_model_args["attn_implementation"] = {
+            "text_config": attn_impl,
+            "vision_config": "eager",
+        }
+        log_rank_0(f"Model has timm vision tower — using eager attention for vision, {attn_impl} for text model.")
 
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
@@ -961,7 +1049,12 @@ def setup_model(
             )
         else:
             # non-distributed path: direct loading
-            model = ModelClass.from_pretrained(**base_model_args)
+            if is_vlm_with_causal_lm(model_config):
+                model = extract_causal_lm_from_vlm(model_name_or_path, base_model_args)
+            elif is_vlm_for_direct_loading(model_config):
+                model = load_vlm_for_text_training(model_name_or_path, base_model_args)
+            else:
+                model = ModelClass.from_pretrained(**base_model_args)
             return align_model_and_tokenizer(model, tokenizer)
 
     def load_osft_model():
@@ -1070,6 +1163,7 @@ def setup_model(
     # List of supported architectures
     if class_name not in [
         "MistralForCausalLM",
+        "Ministral3ForCausalLM",
         "GPTDolomiteForCausalLM",
         "LlamaForCausalLM",
         "Starcoder2ForCausalLM",
@@ -1080,6 +1174,9 @@ def setup_model(
         "Qwen2ForCausalLM",
         "Phi3ForCausalLM",  # covers phi3 and phi4
         "Qwen3ForCausalLM",
+        "Qwen3_5ForCausalLM",
+        "Qwen3VLForConditionalGeneration",  # direct VLM loading (no CausalLM class)
+        "Gemma3nForConditionalGeneration",  # dual-registered VLM loaded as CausalLM
     ]:
         log_rank_0(
             f"\033[38;2;255;255;0mWarning: Model class name: {class_name} is not in the list of supported models.\033[0m",
