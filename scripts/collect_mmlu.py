@@ -18,6 +18,13 @@ TASKS = [
     "ScienceQA", "NumGLUE-cm", "NumGLUE-ds", "20Minuten",
 ]
 
+# Column widths for the report table.
+# col_label must be wide enough for the longest label: "osft_task_8 (20Minuten)" = 23 chars.
+COL_LABEL = 30
+COL_ACC   = 10
+COL_DORIG = 15
+COL_DSVD  = 16
+
 
 def extract_mmlu_acc(results_dir: Path) -> float | None:
     path = results_dir / "results.json"
@@ -58,10 +65,10 @@ def main():
     original_acc = extract_mmlu_acc(mmlu_root / "original")
     svd_acc      = extract_mmlu_acc(mmlu_root / "svd_truncated")
 
-    col_label  = 30  # "osft_task_8 (20Minuten)" = 23 chars; extra headroom
-    col_acc    = 10
-    col_dorig  = 15
-    col_dsvd   = 16
+    col_label = COL_LABEL
+    col_acc   = COL_ACC
+    col_dorig = COL_DORIG
+    col_dsvd  = COL_DSVD
 
     header = (
         f"{'Checkpoint':<{col_label}}"
