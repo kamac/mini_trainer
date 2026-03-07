@@ -185,6 +185,46 @@ args = TrainingArgs(
 
 ---
 
+## TRACE Benchmark (OSFT Continual Learning)
+
+Reproduces the OSFT results from [arXiv:2504.07097](https://arxiv.org/abs/2504.07097) on the
+[TRACE benchmark](https://arxiv.org/abs/2310.06762) (8 sequential tasks, LLaMA-2-7B-Chat).
+See [`docs/trace_benchmark_reproduction.md`](docs/trace_benchmark_reproduction.md) for full details.
+
+**Prerequisites:** download the TRACE dataset from the
+[TRACE repository](https://github.com/BeyonderXX/TRACE) Google Drive link and extract it to
+`/data/TRACE` before running.
+
+```bash
+# 1. Install dependencies and tokenize data
+bash scripts/setup.sh
+
+# 2. MMLU baselines: original model + SVD-truncated model (run once, before training)
+bash scripts/baselines.sh
+
+# 3. Sequential OSFT training across all 8 tasks
+#    Evaluates TRACE tasks and MMLU after each task; resumes automatically if interrupted
+bash scripts/train_trace_osft.sh
+
+# 4. Print final metrics (Average Accuracy, Backward Transfer, MMLU drift table)
+bash scripts/report.sh
+```
+
+All scripts accept `--help` flags and share common overrides:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--model` | `meta-llama/Llama-2-7b-chat-hf` | Base model |
+| `--ckpt-root` | `/checkpoints/trace_osft` | Where checkpoints are saved |
+| `--results-dir` | `results` | Where eval results are written |
+| `--n-gpus` | `1` | GPU count (single A100 80GB minimum) |
+| `--unfreeze-rank-ratio` | `0.25` | Fraction of singular subspace OSFT trains in |
+
+Results land in `results/` — TRACE per-task JSONs, MMLU `results.json` files per checkpoint,
+and a combined `results/report.txt` after step 4.
+
+---
+
 ## 🐛 Bug Reports & Issues
 
 Found a bug or have a feature request? We'd love to hear from you! Please [open an issue](https://github.com/Red-Hat-AI-Innovation-Team/mini_trainer/issues) on GitHub with:
