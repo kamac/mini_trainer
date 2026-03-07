@@ -17,7 +17,6 @@ MODEL="meta-llama/Llama-2-7b-chat-hf"
 CKPT_ROOT="/checkpoints/trace_osft"
 RESULTS_DIR="results"
 UNFREEZE_RANK_RATIO="0.25"
-N_GPUS=1
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -26,7 +25,6 @@ while [[ $# -gt 0 ]]; do
         --ckpt-root)            CKPT_ROOT="$2";           shift 2 ;;
         --results-dir)          RESULTS_DIR="$2";         shift 2 ;;
         --unfreeze-rank-ratio)  UNFREEZE_RANK_RATIO="$2"; shift 2 ;;
-        --n-gpus)               N_GPUS="$2";              shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
@@ -37,8 +35,8 @@ MMLU_DIR="$RESULTS_DIR/mmlu"
 echo "================================================================"
 echo " TRACE baselines"
 echo "  model              : $MODEL"
-echo "  SVD checkpoint     : $SVD_CKPT"
-echo "  results            : $MMLU_DIR"
+echo "  SVD checkpoint out : $SVD_CKPT"
+echo "  MMLU results       : $MMLU_DIR"
 echo "  unfreeze rank ratio: $UNFREEZE_RANK_RATIO"
 echo "================================================================"
 
@@ -50,13 +48,14 @@ if [[ -f "$MMLU_DIR/original/results.json" ]]; then
 else
     echo ""
     echo "── 3a. Evaluating MMLU on original model ──"
+    mkdir -p "$MMLU_DIR/original"
     lm_eval \
         --model hf \
         --model_args "pretrained=$MODEL,dtype=bfloat16" \
         --tasks mmlu \
         --num_fewshot 5 \
         --batch_size auto \
-        --output_path "$MMLU_DIR/original"
+        --output_path "$MMLU_DIR/original/results.json"
     echo "── 3a complete: $MMLU_DIR/original/results.json ──"
 fi
 
@@ -79,13 +78,14 @@ if [[ -f "$MMLU_DIR/svd_truncated/results.json" ]]; then
 else
     echo ""
     echo "── 3c. Evaluating MMLU on SVD-truncated model ──"
+    mkdir -p "$MMLU_DIR/svd_truncated"
     lm_eval \
         --model hf \
         --model_args "pretrained=$SVD_CKPT,dtype=bfloat16" \
         --tasks mmlu \
         --num_fewshot 5 \
         --batch_size auto \
-        --output_path "$MMLU_DIR/svd_truncated"
+        --output_path "$MMLU_DIR/svd_truncated/results.json"
     echo "── 3c complete: $MMLU_DIR/svd_truncated/results.json ──"
 fi
 

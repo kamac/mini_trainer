@@ -77,6 +77,9 @@ mkdir -p "$CKPT_ROOT" "$RESULTS_DIR/mmlu"
 # (written by save_pretrained at the end of training).
 
 find_last_completed_task() {
+    # Return the last task number in an unbroken sequence of completed checkpoints.
+    # Stops at the first gap so that a partially-saved or deleted checkpoint causes
+    # re-training from that point, not a silent skip that corrupts the model chain.
     local last=0
     for i in "${!TASKS[@]}"; do
         local task_num=$((i + 1))
@@ -84,6 +87,8 @@ find_last_completed_task() {
         local ckpt="$CKPT_ROOT/task_${task_num}_${task}"
         if [[ -f "$ckpt/config.json" ]]; then
             last=$task_num
+        else
+            break
         fi
     done
     echo "$last"
@@ -192,13 +197,14 @@ for i in "${!TASKS[@]}"; do
     else
         echo ""
         echo "── MMLU evaluation after task $TASK_NUM ──"
+        mkdir -p "$MMLU_OUT"
         lm_eval \
             --model hf \
             --model_args "pretrained=$OUTPUT_DIR,dtype=bfloat16" \
             --tasks mmlu \
             --num_fewshot 5 \
             --batch_size auto \
-            --output_path "$MMLU_OUT"
+            --output_path "$MMLU_OUT/results.json"
         echo "── MMLU complete: $MMLU_OUT/results.json ──"
     fi
 

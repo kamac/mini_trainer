@@ -36,6 +36,15 @@ echo "  raw data  : $TRACE_DIR"
 echo "  tokenized : $DATA_DIR"
 echo "================================================================"
 
+# ── Pre-flight check ──────────────────────────────────────────────────────────
+# Check for the raw TRACE data before spending time on pip installs.
+if [[ ! -d "$TRACE_DIR" ]]; then
+    echo "ERROR: TRACE raw data directory not found: $TRACE_DIR"
+    echo "Download it from the Google Drive link in https://github.com/BeyonderXX/TRACE"
+    echo "then re-run this script."
+    exit 1
+fi
+
 # ── Phase 1: install dependencies ─────────────────────────────────────────────
 echo ""
 echo "── Phase 1: installing dependencies ──"
@@ -60,12 +69,6 @@ echo "── Phase 1 complete ──"
 # ── Phase 2: tokenize TRACE data ──────────────────────────────────────────────
 echo ""
 echo "── Phase 2: tokenizing TRACE data ──"
-
-if [[ ! -d "$TRACE_DIR" ]]; then
-    echo "ERROR: TRACE raw data directory not found: $TRACE_DIR"
-    echo "Download it from the Google Drive link in https://github.com/BeyonderXX/TRACE"
-    exit 1
-fi
 
 python scripts/convert_trace_data.py \
     --model "$MODEL" \

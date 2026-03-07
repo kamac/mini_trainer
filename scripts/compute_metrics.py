@@ -47,21 +47,15 @@ def main():
     print(f"\n{'Task':<20} {'Acc@own':>9} {'Acc@final':>10} {'BWT contrib':>12}")
     print("-" * 56)
     for i, task in enumerate(TASKS):
-        acc_own   = A.get((i, i))
-        acc_final = A.get((i, T - 1))
+        acc_own     = A.get((i, i))
+        acc_final   = A.get((i, T - 1))
         bwt_contrib = (acc_final - acc_own) if (acc_final is not None and acc_own is not None) else None
-        print(
-            f"{task:<20}"
-            f" {acc_own*100:>8.1f}%" if acc_own is not None else f" {'N/A':>9}",
-            end="",
-        )
-        print(
-            f" {acc_final*100:>9.1f}%" if acc_final is not None else f" {'N/A':>10}",
-            end="",
-        )
-        print(
-            f" {bwt_contrib*100:>+11.1f}%" if bwt_contrib is not None else f" {'N/A':>12}",
-        )
+
+        own_str = f"{acc_own*100:>8.1f}%"       if acc_own     is not None else f"{'N/A':>9}"
+        fin_str = f"{acc_final*100:>9.1f}%"     if acc_final   is not None else f"{'N/A':>10}"
+        bwt_str = f"{bwt_contrib*100:>+11.1f}%" if bwt_contrib is not None else f"{'N/A':>12}"
+
+        print(f"{task:<20} {own_str} {fin_str} {bwt_str}")
 
     # Aggregate metrics
     final_accs = [A[(i, T - 1)] for i in range(T) if (i, T - 1) in A]

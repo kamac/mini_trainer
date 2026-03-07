@@ -29,11 +29,12 @@ def extract_mmlu_acc(results_dir: Path) -> float | None:
     # lm_eval ≥0.4 stores aggregate under "mmlu" key
     if "mmlu" in results:
         entry = results["mmlu"]
-        return entry.get("acc,none") or entry.get("acc")
+        val = entry.get("acc,none")
+        return val if val is not None else entry.get("acc")
 
     # Fall back: average all mmlu_* subtask entries
     subtask_accs = [
-        v.get("acc,none") or v.get("acc")
+        (v.get("acc,none") if v.get("acc,none") is not None else v.get("acc"))
         for k, v in results.items()
         if k.startswith("mmlu_") and isinstance(v, dict)
     ]
@@ -57,7 +58,7 @@ def main():
     original_acc = extract_mmlu_acc(mmlu_root / "original")
     svd_acc      = extract_mmlu_acc(mmlu_root / "svd_truncated")
 
-    col_label  = 22
+    col_label  = 30  # "osft_task_8 (20Minuten)" = 23 chars; extra headroom
     col_acc    = 10
     col_dorig  = 15
     col_dsvd   = 16
