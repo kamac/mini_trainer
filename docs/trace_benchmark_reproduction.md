@@ -39,6 +39,14 @@ pip install -e .[cuda] --no-build-isolation
 pip install rouge-score sacrebleu transformers datasets accelerate
 ```
 
+### Install lm-evaluation-harness (for MMLU)
+
+```bash
+pip install lm-eval
+# Verify:
+lm_eval --version
+```
+
 ### Clone TRACE repository (for evaluation scripts and data)
 
 ```bash
@@ -130,6 +138,142 @@ for task in TRACE_TASKS:
 
 ---
 
+## Step 2c: MMLU Baseline Evaluations (run once before any training)
+
+Before any continual learning, establish two baselines that will anchor every subsequent
+MMLU comparison:
+
+| Baseline | Description |
+|----------|-------------|
+| **Original** | The unmodified `meta-llama/Llama-2-7b-chat-hf` |
+| **SVD-truncated** | Original model with low singular components zeroed out — the *same subspace* that OSFT trains in, but with nothing learned there yet. This isolates the cost of reserving that subspace from the benefit of learning in it. |
+
+### 2c-i. Evaluate MMLU on the original model
+
+```bash
+lm_eval \
+    --model hf \
+    --model_args pretrained=meta-llama/Llama-2-7b-chat-hf,dtype=bfloat16 \
+    --tasks mmlu \
+    --num_fewshot 5 \
+    --batch_size auto \
+    --output_path results/mmlu/original
+```
+
+### 2c-ii. Create and evaluate the SVD-truncated baseline
+
+OSFT trains exclusively in the subspace spanned by the **lowest** `osft_unfreeze_rank_ratio`
+fraction of singular vectors of each weight matrix. The SVD-truncated baseline answers:
+*"What accuracy does the model have if we simply erase that subspace — with no new knowledge
+written in — compared to OSFT which actively learns in it?"*
+
+Create `scripts/make_svd_truncated_model.py`:
+
+```python
+"""
+Create an SVD-truncated version of a model by zeroing out the low singular-value
+components — exactly the subspace that OSFT trains in.
+
+For LLaMA-2, OSFT targets (per layer):
+  self_attn.{q,k,v,o}_proj   and   mlp.{gate,up,down}_proj
+
+With osft_unfreeze_rank_ratio=0.25, the bottom 25% of singular values are zeroed;
+the top 75% are kept unchanged.
+"""
+
+import argparse
+from pathlib import Path
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Layer suffixes targeted by OSFT for LLaMA-style models (see osft_utils.py lines 200-207)
+LLAMA_TARGET_SUFFIXES = (
+    "self_attn.q_proj",
+    "self_attn.k_proj",
+    "self_attn.v_proj",
+    "self_attn.o_proj",
+    "mlp.gate_proj",
+    "mlp.up_proj",
+    "mlp.down_proj",
+)
+
+
+def truncate_model(model_path: str, output_path: str, unfreeze_rank_ratio: float) -> None:
+    """Zero out the bottom `unfreeze_rank_ratio` fraction of singular values in
+    every targeted weight matrix, leaving the rest of the model untouched."""
+
+    print(f"Loading model from {model_path} ...")
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path, torch_dtype=torch.bfloat16, device_map="cpu"
+    )
+
+    n_truncated = 0
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if not any(name.endswith(f"{suffix}.weight") for suffix in LLAMA_TARGET_SUFFIXES):
+                continue
+            if param.dim() != 2:
+                continue
+
+            W = param.data.float()  # SVD is numerically sensitive; use float32
+            U, S, Vh = torch.linalg.svd(W, full_matrices=False)
+
+            # Keep only the top (1 - unfreeze_rank_ratio) singular components
+            keep_k = max(1, int(round(S.shape[0] * (1.0 - unfreeze_rank_ratio))))
+            S[keep_k:] = 0.0  # zero out the low-value components
+
+            param.data = (U @ torch.diag(S) @ Vh).to(param.dtype)
+            n_truncated += 1
+            print(f"  Truncated {name}: kept {keep_k}/{S.shape[0]} singular values")
+
+    print(f"\nTruncated {n_truncated} weight matrices.")
+    print(f"Saving to {output_path} ...")
+    Path(output_path).mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(output_path)
+
+    # Copy tokenizer files so the output directory is self-contained
+    tok = AutoTokenizer.from_pretrained(model_path)
+    tok.save_pretrained(output_path)
+    print("Done.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-path", required=True)
+    parser.add_argument("--output-path", required=True)
+    parser.add_argument("--unfreeze-rank-ratio", type=float, default=0.25,
+                        help="Fraction of singular values to zero out (must match OSFT config)")
+    args = parser.parse_args()
+    truncate_model(args.model_path, args.output_path, args.unfreeze_rank_ratio)
+```
+
+Run it:
+
+```bash
+python scripts/make_svd_truncated_model.py \
+    --model-path meta-llama/Llama-2-7b-chat-hf \
+    --output-path /checkpoints/trace_osft/svd_truncated_baseline \
+    --unfreeze-rank-ratio 0.25
+```
+
+Then evaluate MMLU on the truncated model:
+
+```bash
+lm_eval \
+    --model hf \
+    --model_args pretrained=/checkpoints/trace_osft/svd_truncated_baseline,dtype=bfloat16 \
+    --tasks mmlu \
+    --num_fewshot 5 \
+    --batch_size auto \
+    --output_path results/mmlu/svd_truncated
+```
+
+Record the aggregate `acc` score from both runs — these are the fixed anchors for all
+subsequent comparisons.
+
+---
+
 ## Step 3: Sequential Continual Learning Training
 
 Train on each of the 8 TRACE tasks in order. After each task, save a checkpoint.
@@ -156,6 +300,10 @@ Train on each of the 8 TRACE tasks in order. After each task, save a checkpoint.
 
 ### Training script `scripts/train_trace_osft.sh`
 
+MMLU is evaluated after each task checkpoint is saved. Results land in
+`results/mmlu/osft_after_task_N/` and can be compared directly against the two fixed
+baselines established in Step 2c.
+
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -163,6 +311,7 @@ set -euo pipefail
 MODEL="meta-llama/Llama-2-7b-chat-hf"
 DATA_ROOT="/data/TRACE_tokenized"
 CKPT_ROOT="/checkpoints/trace_osft"
+MMLU_RESULTS="results/mmlu"
 N_GPUS=8
 
 TASKS=(
@@ -208,18 +357,32 @@ for i in "${!TASKS[@]}"; do
         --save-final-checkpoint \
         --checkpoint-at-epoch
 
+    echo "=== Finished Task $TASK_NUM: $TASK. Checkpoint: $OUTPUT_DIR ==="
+
+    # --- MMLU evaluation after this task ---
+    echo "=== MMLU evaluation after task $TASK_NUM ==="
+    lm_eval \
+        --model hf \
+        --model_args pretrained="$OUTPUT_DIR",dtype=bfloat16 \
+        --tasks mmlu \
+        --num_fewshot 5 \
+        --batch_size auto \
+        --output_path "$MMLU_RESULTS/osft_after_task_${TASK_NUM}"
+    echo "=== MMLU done for task $TASK_NUM ==="
+
     # Use this task's checkpoint as the starting point for the next task
     CURRENT_MODEL="$OUTPUT_DIR"
-    echo "=== Finished Task $TASK_NUM: $TASK. Checkpoint: $OUTPUT_DIR ==="
 done
 
-echo "=== Sequential training complete ==="
+echo "=== Sequential training + MMLU evaluations complete ==="
 ```
 
 ### Comparison: SeqFT baseline `scripts/train_trace_seqft.sh`
 
-Same script as above but **without** `--osft` and `--osft-unfreeze-rank-ratio`. This reproduces
-the SeqFT (sequential full fine-tuning) baseline.
+Same script as above but **without** `--osft` and `--osft-unfreeze-rank-ratio`, and with
+`MMLU_RESULTS="results/mmlu_seqft"`. This reproduces the SeqFT (sequential full fine-tuning)
+baseline. MMLU is still evaluated after each task so catastrophic forgetting of general knowledge
+is visible for both methods.
 
 ---
 
@@ -252,6 +415,95 @@ done
 ```
 
 Run this after each task checkpoint is saved.
+
+---
+
+## Step 4b: Collect MMLU Scores Across Checkpoints
+
+`lm_eval` writes a `results.json` into each `--output_path` directory. Parse them all into
+a single summary with `scripts/collect_mmlu.py`:
+
+```python
+"""Collect MMLU accuracy scores across all checkpoints and print a comparison table."""
+
+import json
+from pathlib import Path
+
+RESULTS_ROOT = Path("results/mmlu")
+
+CHECKPOINTS = {
+    "original":      RESULTS_ROOT / "original",
+    "svd_truncated": RESULTS_ROOT / "svd_truncated",
+    **{
+        f"osft_task_{i}": RESULTS_ROOT / f"osft_after_task_{i}"
+        for i in range(1, 9)
+    },
+}
+
+TASK_NAMES = ["C-STANCE", "FOMC", "MeetingBank", "Py150",
+              "ScienceQA", "NumGLUE-cm", "NumGLUE-ds", "20Minuten"]
+
+
+def extract_mmlu_acc(results_dir: Path) -> float | None:
+    """Return aggregate MMLU accuracy from an lm_eval output directory."""
+    path = results_dir / "results.json"
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text())
+    # lm_eval stores aggregate under key "mmlu" or as average of subtasks
+    results = data.get("results", {})
+    if "mmlu" in results:
+        return results["mmlu"].get("acc,none") or results["mmlu"].get("acc")
+    # Fall back: average all mmlu_* subtasks
+    subtask_accs = [
+        v.get("acc,none") or v.get("acc")
+        for k, v in results.items()
+        if k.startswith("mmlu_") and isinstance(v, dict)
+    ]
+    return sum(subtask_accs) / len(subtask_accs) if subtask_accs else None
+
+
+print(f"{'Checkpoint':<22} {'MMLU acc':>10}  {'Δ vs original':>14}  {'Δ vs SVD-trunc':>15}")
+print("-" * 68)
+
+original_acc = extract_mmlu_acc(CHECKPOINTS["original"])
+svd_acc = extract_mmlu_acc(CHECKPOINTS["svd_truncated"])
+
+for label, results_dir in CHECKPOINTS.items():
+    acc = extract_mmlu_acc(results_dir)
+    acc_str   = f"{acc*100:.2f}%" if acc is not None else "N/A"
+    delta_orig = f"{(acc - original_acc)*100:+.2f}%" if (acc and original_acc) else "N/A"
+    delta_svd  = f"{(acc - svd_acc)*100:+.2f}%"     if (acc and svd_acc)      else "N/A"
+    print(f"{label:<22} {acc_str:>10}  {delta_orig:>14}  {delta_svd:>15}")
+```
+
+Run after all training is complete (or incrementally after each task):
+
+```bash
+python scripts/collect_mmlu.py
+```
+
+Example output shape (fill in actuals):
+
+```
+Checkpoint             MMLU acc   Δ vs original   Δ vs SVD-trunc
+--------------------------------------------------------------------
+original                  63.45%           —               —
+svd_truncated             62.10%       -1.35%              —
+osft_task_1               62.80%       -0.65%          +0.70%
+osft_task_2               62.50%       -0.95%          +0.40%
+...
+osft_task_8               61.90%       -1.55%          -0.20%
+```
+
+**How to read this:**
+
+- **Δ vs original**: total MMLU change attributable to continual training (negative = some
+  general knowledge was overwritten).
+- **Δ vs SVD-truncated**: how much of the accuracy loss (or gain!) comes from *actively learning
+  in the low-singular-value subspace* versus merely *reserving it*. If this delta is near zero,
+  OSFT is using its training budget in a way that is neutral to general knowledge; if positive,
+  the learned weights actually help on MMLU.
 
 ---
 
@@ -308,6 +560,8 @@ print(f"Backward Transfer: {bwt*100:.1f}%")
 
 ## Step 6: Expected Results and Validation
 
+### 6a. TRACE continual-learning metrics
+
 After completing the OSFT run, compare against:
 
 | Metric | Paper (OSFT) | Reproduced |
@@ -320,6 +574,35 @@ A successful reproduction is within ±1–2% of these numbers. Common causes of 
 - Different random seed
 - Different `osft_unfreeze_rank_ratio`
 - GPU count / effective batch size differences affecting convergence
+
+### 6b. MMLU tracking table
+
+Fill in from `python scripts/collect_mmlu.py` after all 8 tasks:
+
+| Checkpoint | MMLU acc | Δ vs original | Δ vs SVD-truncated |
+|------------|----------|--------------|-------------------|
+| Original (Llama-2-7b-chat-hf) | ___ | — | — |
+| SVD-truncated (top 75% kept) | ___ | ___ | — |
+| After task 1 (C-STANCE) | ___ | ___ | ___ |
+| After task 2 (FOMC) | ___ | ___ | ___ |
+| After task 3 (MeetingBank) | ___ | ___ | ___ |
+| After task 4 (Py150) | ___ | ___ | ___ |
+| After task 5 (ScienceQA) | ___ | ___ | ___ |
+| After task 6 (NumGLUE-cm) | ___ | ___ | ___ |
+| After task 7 (NumGLUE-ds) | ___ | ___ | ___ |
+| After task 8 (20Minuten) | ___ | ___ | ___ |
+
+**Key interpretation:**
+
+- If **Δ vs SVD-truncated ≈ 0** throughout: OSFT's training in the low-singular subspace is
+  effectively neutral to general knowledge — the reserved subspace is a "free lunch" for
+  continual learning.
+- If **Δ vs SVD-truncated > 0**: training in that subspace actually *improves* MMLU — the
+  low-singular-value directions contain useful general capacity.
+- If **Δ vs SVD-truncated < 0**: the new task knowledge written into the subspace partially
+  overwrites general-purpose representations that happened to live there.
+- The **Δ vs original** column tracks total MMLU drift; for OSFT this should be much smaller
+  than for SeqFT, since OSFT confines updates to the least-important subspace.
 
 ---
 
