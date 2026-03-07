@@ -26,6 +26,10 @@
 #   --batch-size N                 Sequences per global batch (default: 128)
 #   --unfreeze-rank-ratio FLOAT    OSFT rank ratio (default: 0.25)
 #   --start-task N                 Start from task N (1-indexed) instead of auto-detecting
+#   --max-epochs N                 Epochs per task (default: 3)
+#   --no-liger-kernels             Disable Liger kernels (useful when cuda extras are not installed)
+#   --skip-trace-eval              Skip TRACE task evaluation (useful for testing)
+#   --skip-mmlu-eval               Skip MMLU evaluation (useful for testing)
 
 set -euo pipefail
 
@@ -40,6 +44,10 @@ MAX_TOKENS_PER_GPU=2048
 BATCH_SIZE=128
 UNFREEZE_RANK_RATIO="0.25"
 START_TASK=""   # empty = auto-detect from existing checkpoints
+MAX_EPOCHS=3
+USE_LIGER_KERNELS=true
+SKIP_TRACE_EVAL=false
+SKIP_MMLU_EVAL=false
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -54,6 +62,10 @@ while [[ $# -gt 0 ]]; do
         --batch-size)           BATCH_SIZE="$2";          shift 2 ;;
         --unfreeze-rank-ratio)  UNFREEZE_RANK_RATIO="$2"; shift 2 ;;
         --start-task)           START_TASK="$2";          shift 2 ;;
+        --max-epochs)           MAX_EPOCHS="$2";          shift 2 ;;
+        --no-liger-kernels)     USE_LIGER_KERNELS=false;  shift ;;
+        --skip-trace-eval)      SKIP_TRACE_EVAL=true;     shift ;;
+        --skip-mmlu-eval)       SKIP_MMLU_EVAL=true;      shift ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
@@ -71,10 +83,29 @@ TASKS=(
 
 mkdir -p "$CKPT_ROOT" "$RESULTS_DIR/mmlu"
 
+# ── checkpoint path helpers ───────────────────────────────────────────────────
+# mini_trainer saves HF checkpoints under:
+#   $output_dir/hf_format/samples_<N>/
+# This function finds the latest (highest-samples) checkpoint inside an output dir.
+
+find_hf_checkpoint() {
+    local output_dir="$1"
+    local hf_dir="$output_dir/hf_format"
+    if [[ ! -d "$hf_dir" ]]; then
+        echo ""
+        return
+    fi
+    # Sort numerically by the samples count after the underscore
+    local latest
+    latest=$(ls -d "$hf_dir"/samples_* 2>/dev/null \
+        | sort -t_ -k2 -g \
+        | tail -1)
+    echo "${latest:-}"
+}
+
 # ── resume detection ──────────────────────────────────────────────────────────
 # Find the last completed task checkpoint so we can skip already-done tasks.
-# A checkpoint is considered complete when its directory contains config.json
-# (written by save_pretrained at the end of training).
+# A checkpoint is considered complete when its hf_format/samples_* dir contains config.json.
 
 find_last_completed_task() {
     # Return the last task number in an unbroken sequence of completed checkpoints.
@@ -85,7 +116,9 @@ find_last_completed_task() {
         local task_num=$((i + 1))
         local task="${TASKS[$i]}"
         local ckpt="$CKPT_ROOT/task_${task_num}_${task}"
-        if [[ -f "$ckpt/config.json" ]]; then
+        local hf_ckpt
+        hf_ckpt=$(find_hf_checkpoint "$ckpt")
+        if [[ -n "$hf_ckpt" && -f "$hf_ckpt/config.json" ]]; then
             last=$task_num
         else
             break
@@ -111,7 +144,12 @@ if [[ $LAST_COMPLETED -eq 0 ]]; then
     CURRENT_MODEL="$MODEL"
 else
     PREV_TASK="${TASKS[$((LAST_COMPLETED - 1))]}"
-    CURRENT_MODEL="$CKPT_ROOT/task_${LAST_COMPLETED}_${PREV_TASK}"
+    PREV_OUTPUT_DIR="$CKPT_ROOT/task_${LAST_COMPLETED}_${PREV_TASK}"
+    CURRENT_MODEL=$(find_hf_checkpoint "$PREV_OUTPUT_DIR")
+    if [[ -z "$CURRENT_MODEL" ]]; then
+        echo "Error: could not find HF checkpoint in $PREV_OUTPUT_DIR" >&2
+        exit 1
+    fi
     echo "Starting model: $CURRENT_MODEL"
 fi
 
@@ -137,7 +175,7 @@ for i in "${!TASKS[@]}"; do
     # Skip tasks already completed before this run started
     if [[ $TASK_NUM -le $LAST_COMPLETED ]]; then
         echo "── Skipping task $TASK_NUM ($TASK): checkpoint exists ──"
-        CURRENT_MODEL="$OUTPUT_DIR"
+        CURRENT_MODEL=$(find_hf_checkpoint "$OUTPUT_DIR")
         continue
     fi
 
@@ -146,6 +184,11 @@ for i in "${!TASKS[@]}"; do
     echo "════ Task $TASK_NUM / ${#TASKS[@]}: $TASK ════"
     echo "    input model : $CURRENT_MODEL"
     echo "    output      : $OUTPUT_DIR"
+
+    LIGER_FLAG=""
+    if [[ "$USE_LIGER_KERNELS" == "true" ]]; then
+        LIGER_FLAG="--use-liger-kernels"
+    fi
 
     torchrun \
         --nnodes=1 \
@@ -162,53 +205,65 @@ for i in "${!TASKS[@]}"; do
         --beta1 0.9 \
         --beta2 0.95 \
         --train-dtype bfloat16 \
-        --max-epochs 3 \
+        --max-epochs "$MAX_EPOCHS" \
         --training-mode epoch \
-        --use-liger-kernels \
+        $LIGER_FLAG \
         --osft \
         --osft-unfreeze-rank-ratio "$UNFREEZE_RANK_RATIO" \
         --save-final-checkpoint \
         --checkpoint-at-epoch
 
-    echo "── Training complete: $OUTPUT_DIR ──"
+    # Resolve the actual HF checkpoint (hf_format/samples_N/)
+    CURRENT_MODEL=$(find_hf_checkpoint "$OUTPUT_DIR")
+    if [[ -z "$CURRENT_MODEL" ]]; then
+        echo "Error: training completed but no HF checkpoint found in $OUTPUT_DIR" >&2
+        exit 1
+    fi
+    echo "── Training complete: $CURRENT_MODEL ──"
 
     # ── 5. TRACE task evaluation on all tasks seen so far ────────────────────
-    echo ""
-    echo "── Evaluating TRACE tasks 1–$TASK_NUM after task $TASK_NUM ──"
-    for j in $(seq 0 $((TASK_NUM - 1))); do
-        EVAL_TASK="${TASKS[$j]}"
-        EVAL_OUT="$RESULTS_DIR/${EVAL_TASK}_after_task${TASK_NUM}.json"
-        if [[ -f "$EVAL_OUT" ]]; then
-            echo "   Skipping $EVAL_TASK (result already exists)"
-            continue
-        fi
-        echo "   Evaluating $EVAL_TASK ..."
-        python /opt/TRACE/metrics.py \
-            --model "$OUTPUT_DIR" \
-            --test_file "$TRACE_RAW_DIR/$EVAL_TASK/test.json" \
-            --task "$EVAL_TASK" \
-            --output_file "$EVAL_OUT"
-    done
-
-    # ── MMLU evaluation ───────────────────────────────────────────────────────
-    MMLU_OUT="$RESULTS_DIR/mmlu/osft_after_task_${TASK_NUM}"
-    if [[ -f "$MMLU_OUT/results.json" ]]; then
-        echo "── Skipping MMLU for task $TASK_NUM (already exists) ──"
+    if [[ "$SKIP_TRACE_EVAL" == "true" ]]; then
+        echo "── Skipping TRACE evaluation (--skip-trace-eval) ──"
     else
         echo ""
-        echo "── MMLU evaluation after task $TASK_NUM ──"
-        mkdir -p "$MMLU_OUT"
-        lm_eval \
-            --model hf \
-            --model_args "pretrained=$OUTPUT_DIR,dtype=bfloat16" \
-            --tasks mmlu \
-            --num_fewshot 5 \
-            --batch_size auto \
-            --output_path "$MMLU_OUT/results.json"
-        echo "── MMLU complete: $MMLU_OUT/results.json ──"
+        echo "── Evaluating TRACE tasks 1–$TASK_NUM after task $TASK_NUM ──"
+        for j in $(seq 0 $((TASK_NUM - 1))); do
+            EVAL_TASK="${TASKS[$j]}"
+            EVAL_OUT="$RESULTS_DIR/${EVAL_TASK}_after_task${TASK_NUM}.json"
+            if [[ -f "$EVAL_OUT" ]]; then
+                echo "   Skipping $EVAL_TASK (result already exists)"
+                continue
+            fi
+            echo "   Evaluating $EVAL_TASK ..."
+            python /opt/TRACE/metrics.py \
+                --model "$CURRENT_MODEL" \
+                --test_file "$TRACE_RAW_DIR/$EVAL_TASK/test.json" \
+                --task "$EVAL_TASK" \
+                --output_file "$EVAL_OUT"
+        done
     fi
 
-    CURRENT_MODEL="$OUTPUT_DIR"
+    # ── MMLU evaluation ───────────────────────────────────────────────────────
+    if [[ "$SKIP_MMLU_EVAL" == "true" ]]; then
+        echo "── Skipping MMLU evaluation (--skip-mmlu-eval) ──"
+    else
+        MMLU_OUT="$RESULTS_DIR/mmlu/osft_after_task_${TASK_NUM}"
+        if [[ -f "$MMLU_OUT/results.json" ]]; then
+            echo "── Skipping MMLU for task $TASK_NUM (already exists) ──"
+        else
+            echo ""
+            echo "── MMLU evaluation after task $TASK_NUM ──"
+            mkdir -p "$MMLU_OUT"
+            lm_eval \
+                --model hf \
+                --model_args "pretrained=$CURRENT_MODEL,dtype=bfloat16" \
+                --tasks mmlu \
+                --num_fewshot 5 \
+                --batch_size auto \
+                --output_path "$MMLU_OUT/results.json"
+            echo "── MMLU complete: $MMLU_OUT/results.json ──"
+        fi
+    fi
 done
 
 echo ""

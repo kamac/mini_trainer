@@ -4,8 +4,7 @@ Zeros out the low singular-value components of every targeted weight matrix —
 exactly the subspace that OSFT trains in. This produces the "erased subspace,
 nothing learned" baseline for MMLU comparison.
 
-For LLaMA-2, OSFT targets (per transformer layer):
-  self_attn.{q,k,v,o}_proj  and  mlp.{gate,up,down}_proj  (osft_utils.py:200-207)
+OSFT targets are auto-detected from the model's model_type (osft_utils.py:196-270).
 
 With --unfreeze-rank-ratio 0.25, the bottom 25% of singular values are zeroed
 and the top 75% are kept unchanged.
@@ -21,30 +20,58 @@ import argparse
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-# Layer suffixes targeted by OSFT for LLaMA-style models (osft_utils.py lines 200-207)
-LLAMA_TARGET_SUFFIXES = (
-    "self_attn.q_proj",
-    "self_attn.k_proj",
-    "self_attn.v_proj",
-    "self_attn.o_proj",
-    "mlp.gate_proj",
-    "mlp.up_proj",
-    "mlp.down_proj",
-)
+# Per-model_type layer suffixes targeted by OSFT (mirrors osft_utils.py OSFT_TARGET_PATTERNS)
+_TARGET_SUFFIXES_BY_MODEL_TYPE = {
+    "llama": (
+        "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
+        "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj",
+    ),
+    "gpt2": (
+        "attn.c_attn", "attn.c_proj", "mlp.c_fc", "mlp.c_proj",
+    ),
+    "mistral": (
+        "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
+        "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj",
+    ),
+    "gemma": (
+        "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
+        "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj",
+    ),
+    "opt": (
+        "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.out_proj",
+        "fc1", "fc2",
+    ),
+}
+
+
+def _get_target_suffixes(model_path: str) -> tuple[str, ...]:
+    config = AutoConfig.from_pretrained(model_path)
+    model_type = getattr(config, "model_type", "").lower()
+    # Try exact match first, then prefix match
+    if model_type in _TARGET_SUFFIXES_BY_MODEL_TYPE:
+        return _TARGET_SUFFIXES_BY_MODEL_TYPE[model_type]
+    for key in _TARGET_SUFFIXES_BY_MODEL_TYPE:
+        if model_type.startswith(key):
+            return _TARGET_SUFFIXES_BY_MODEL_TYPE[key]
+    # Fall back to LLaMA-style (most common)
+    print(f"  Warning: unknown model_type '{model_type}', falling back to LLaMA-style suffixes")
+    return _TARGET_SUFFIXES_BY_MODEL_TYPE["llama"]
 
 
 def truncate_model(model_path: str, output_path: str, unfreeze_rank_ratio: float) -> None:
+    target_suffixes = _get_target_suffixes(model_path)
     print(f"Loading model from {model_path} ...")
+    print(f"  Target suffixes: {target_suffixes}")
     model = AutoModelForCausalLM.from_pretrained(
-        model_path, torch_dtype=torch.bfloat16, device_map="cpu"
+        model_path, dtype=torch.bfloat16
     )
 
     n_truncated = 0
     with torch.no_grad():
         for name, param in model.named_parameters():
-            if not any(name.endswith(f"{s}.weight") for s in LLAMA_TARGET_SUFFIXES):
+            if not any(name.endswith(f"{s}.weight") for s in target_suffixes):
                 continue
             if param.dim() != 2:
                 continue

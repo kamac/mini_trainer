@@ -844,19 +844,28 @@ def _load_model_memory_efficient(
 
     # this instantiates the model as we'd expect, except that params and buffers
     # only load their metadata (dtype, shape) without loading the raw data or creating new random weights
-    with torch.device("meta"):
-        model = actual_osft_cls(
-            config=config,
-            initialize_osft=False,
-            # TODO: remove `upcast_dtype` and `output_dtype`
-            upcast_dtype=osft_class_kwargs.get("upcast_dtype", torch.float32),
-            output_dtype=osft_class_kwargs.get("output_dtype"),
-            fsdp2_lazy_init=True,
-            # provide the osft model with the logical set of original parameter keys
-            lazy_init_param_keys=param_keys,
-            lazy_init_buffer_dict=buffer_dict,
-            **extra_kwargs,
-        )
+    # Use the training dtype so that spec.dtype in orig_param_registry matches train_dtype.
+    # Without this, meta tensors default to float32 and Phase 3 would convert non-OSFT trainable
+    # params (embed_tokens, lm_head, layernorms) to float32, breaking bfloat16 training validation.
+    _meta_dtype = load_dtype if load_dtype is not None else torch.get_default_dtype()
+    _prev_default_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(_meta_dtype)
+    try:
+        with torch.device("meta"):
+            model = actual_osft_cls(
+                config=config,
+                initialize_osft=False,
+                # TODO: remove `upcast_dtype` and `output_dtype`
+                upcast_dtype=osft_class_kwargs.get("upcast_dtype", torch.float32),
+                output_dtype=osft_class_kwargs.get("output_dtype"),
+                fsdp2_lazy_init=True,
+                # provide the osft model with the logical set of original parameter keys
+                lazy_init_param_keys=param_keys,
+                lazy_init_buffer_dict=buffer_dict,
+                **extra_kwargs,
+            )
+    finally:
+        torch.set_default_dtype(_prev_default_dtype)
 
     return model
 

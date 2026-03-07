@@ -441,6 +441,13 @@ def wrap_fsdp2(model: torch.nn.Module) -> torch.nn.Module:
         layers = model.model.language_model.layers
     elif hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers
+    elif (
+        hasattr(model, "model")
+        and hasattr(model.model, "decoder")
+        and hasattr(model.model.decoder, "layers")
+    ):
+        # OPT-style: model.model.decoder.layers
+        layers = model.model.decoder.layers
     elif hasattr(model, "transformer") and hasattr(model.transformer, "h"):
         layers = model.transformer.h
     else:
