@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup.sh — Phase 1 & 2: environment setup and data preparation
+# setup.sh — Phase 1, 2 & 3: environment setup, data download, and tokenization
 #
 # Usage:
 #   bash scripts/setup.sh [--model MODEL] [--data-dir DIR] [--trace-dir DIR]
@@ -9,8 +9,8 @@
 #   DATA_DIR   = /data/TRACE_tokenized
 #   TRACE_DIR  = /data/TRACE
 #
-# The TRACE raw data must already be downloaded and extracted to TRACE_DIR.
-# Download from the Google Drive link in https://github.com/BeyonderXX/TRACE
+# If TRACE_DIR does not exist, the dataset is downloaded automatically from
+# Google Drive (https://github.com/BeyonderXX/TRACE) using gdown.
 
 set -euo pipefail
 
@@ -36,15 +36,6 @@ echo "  raw data  : $TRACE_DIR"
 echo "  tokenized : $DATA_DIR"
 echo "================================================================"
 
-# ── Pre-flight check ──────────────────────────────────────────────────────────
-# Check for the raw TRACE data before spending time on pip installs.
-if [[ ! -d "$TRACE_DIR" ]]; then
-    echo "ERROR: TRACE raw data directory not found: $TRACE_DIR"
-    echo "Download it from the Google Drive link in https://github.com/BeyonderXX/TRACE"
-    echo "then re-run this script."
-    exit 1
-fi
-
 # ── Phase 1: install dependencies ─────────────────────────────────────────────
 echo ""
 echo "── Phase 1: installing dependencies ──"
@@ -52,6 +43,7 @@ echo "── Phase 1: installing dependencies ──"
 pip install -e ".[cuda]" --no-build-isolation
 
 pip install \
+    gdown \
     rouge-score \
     sacrebleu \
     transformers \
@@ -66,15 +58,52 @@ pip install -r /opt/TRACE/requirements.txt
 
 echo "── Phase 1 complete ──"
 
-# ── Phase 2: tokenize TRACE data ──────────────────────────────────────────────
+# ── Phase 2: download TRACE dataset (if not already present) ──────────────────
 echo ""
-echo "── Phase 2: tokenizing TRACE data ──"
+echo "── Phase 2: downloading TRACE dataset ──"
+
+GDRIVE_FILE_ID="1S0SmU0WEw5okW_XvP2Ns0URflNzZq6sV"
+
+if [[ -d "$TRACE_DIR" ]]; then
+    echo "  TRACE data already present at $TRACE_DIR — skipping download."
+else
+    TRACE_ARCHIVE="$(mktemp /tmp/TRACE_XXXXXX)"
+    echo "  Downloading from Google Drive …"
+    gdown "https://drive.google.com/uc?id=$GDRIVE_FILE_ID" \
+        -O "$TRACE_ARCHIVE" --fuzzy
+
+    TRACE_TMP="$(mktemp -d /tmp/TRACE_extract_XXXXXX)"
+    echo "  Extracting …"
+    if python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1])" \
+            "$TRACE_ARCHIVE" 2>/dev/null; then
+        unzip -q "$TRACE_ARCHIVE" -d "$TRACE_TMP"
+    else
+        tar -xf "$TRACE_ARCHIVE" -C "$TRACE_TMP"
+    fi
+    rm "$TRACE_ARCHIVE"
+
+    # If the archive extracted a single top-level subdirectory, use that.
+    mapfile -t EXTRACTED < <(find "$TRACE_TMP" -mindepth 1 -maxdepth 1 -type d)
+    if [[ ${#EXTRACTED[@]} -eq 1 ]]; then
+        mv "${EXTRACTED[0]}" "$TRACE_DIR"
+        rm -rf "$TRACE_TMP"
+    else
+        mv "$TRACE_TMP" "$TRACE_DIR"
+    fi
+    echo "  TRACE dataset extracted to $TRACE_DIR"
+fi
+
+echo "── Phase 2 complete ──"
+
+# ── Phase 3: tokenize TRACE data ──────────────────────────────────────────────
+echo ""
+echo "── Phase 3: tokenizing TRACE data ──"
 
 python scripts/convert_trace_data.py \
     --model "$MODEL" \
     --trace-dir "$TRACE_DIR" \
     --output-dir "$DATA_DIR"
 
-echo "── Phase 2 complete ──"
+echo "── Phase 3 complete ──"
 echo ""
 echo "Setup done. Next: bash scripts/baselines.sh"
