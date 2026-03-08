@@ -27,10 +27,11 @@ COL_DSVD  = 16
 
 
 def extract_mmlu_acc(results_dir: Path) -> float | None:
-    # lm_eval ≥0.4 writes results_<timestamp>.json rather than results.json
+    # lm_eval ≥0.4 writes results_<timestamp>.json, optionally in a model-named subdir
     path = results_dir / "results.json"
     if not path.exists():
-        candidates = sorted(results_dir.glob("results*.json"))
+        candidates = sorted(results_dir.glob("results*.json")) + \
+                     sorted(results_dir.glob("*/results*.json"))
         if not candidates:
             return None
         path = candidates[-1]  # latest by lexicographic sort (ISO timestamp)

@@ -179,6 +179,17 @@ for i in "${!TASKS[@]}"; do
         continue
     fi
 
+    # ── Delete the checkpoint two tasks back before training ─────────────────
+    # Task N trains from task N-1 checkpoint, so we can safely delete task N-2.
+    # (task N-2's MMLU already ran at the end of the previous iteration)
+    if [[ $TASK_NUM -gt 2 ]]; then
+        OLD_TASK_DIR="$CKPT_ROOT/task_$((TASK_NUM - 2))_${TASKS[$((TASK_NUM - 3))]}"
+        if [[ -d "$OLD_TASK_DIR" ]]; then
+            echo "── Removing old checkpoint $OLD_TASK_DIR to free disk ──"
+            rm -rf "$OLD_TASK_DIR"
+        fi
+    fi
+
     # ── 4. Train on this task ─────────────────────────────────────────────────
     echo ""
     echo "════ Task $TASK_NUM / ${#TASKS[@]}: $TASK ════"
@@ -210,8 +221,7 @@ for i in "${!TASKS[@]}"; do
         $LIGER_FLAG \
         --osft \
         --osft-unfreeze-rank-ratio "$UNFREEZE_RANK_RATIO" \
-        --save-final-checkpoint \
-        --checkpoint-at-epoch
+        --save-final-checkpoint
 
     # Resolve the actual HF checkpoint (hf_format/samples_N/)
     CURRENT_MODEL=$(find_hf_checkpoint "$OUTPUT_DIR")
@@ -248,7 +258,8 @@ for i in "${!TASKS[@]}"; do
         echo "── Skipping MMLU evaluation (--skip-mmlu-eval) ──"
     else
         MMLU_OUT="$RESULTS_DIR/mmlu/osft_after_task_${TASK_NUM}"
-        if [[ -f "$MMLU_OUT/results.json" ]]; then
+        # lm_eval ≥0.4 writes results_<timestamp>.json into a model-named subdir
+        if find "$MMLU_OUT" -name "results*.json" 2>/dev/null | grep -q .; then
             echo "── Skipping MMLU for task $TASK_NUM (already exists) ──"
         else
             echo ""
@@ -260,10 +271,11 @@ for i in "${!TASKS[@]}"; do
                 --tasks mmlu \
                 --num_fewshot 5 \
                 --batch_size auto \
-                --output_path "$MMLU_OUT/results.json"
-            echo "── MMLU complete: $MMLU_OUT/results.json ──"
+                --output_path "$MMLU_OUT"
+            echo "── MMLU complete: $MMLU_OUT ──"
         fi
     fi
+
 done
 
 echo ""
