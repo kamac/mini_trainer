@@ -16,7 +16,7 @@ set -euo pipefail
 MODEL="meta-llama/Llama-2-7b-chat-hf"
 CKPT_ROOT="/checkpoints/trace_osft"
 RESULTS_DIR="results"
-UNFREEZE_RANK_RATIO="0.25"
+UNFREEZE_RANK_RATIO="0.10"
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do

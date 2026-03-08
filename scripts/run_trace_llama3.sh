@@ -27,7 +27,10 @@ export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN:-}"  # set HF_TOKEN in your environmen
 # Use SDPA instead of flash-attn (not installed)
 export TESTING=true
 
-mkdir -p "$CKPT_ROOT" "$RESULTS_DIR/mmlu"
+UNFREEZE_RANK_RATIO="0.10"
+SPECTRAL_DIR="$RESULTS_DIR/spectral"
+
+mkdir -p "$CKPT_ROOT" "$RESULTS_DIR/mmlu" "$SPECTRAL_DIR"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
@@ -67,7 +70,7 @@ else
     python3 "$REPO_ROOT/scripts/make_svd_truncated_model.py" \
         --model-path "$MODEL" \
         --output-path "$SVD_MODEL" \
-        --unfreeze-rank-ratio 0.25
+        --unfreeze-rank-ratio "$UNFREEZE_RANK_RATIO"
     log "Phase 3a: done"
 fi
 
@@ -87,6 +90,19 @@ else
     log "Phase 3b: done"
 fi
 
+# ── Phase 3c: Spectral analysis of original model ───────────────────────────
+if [[ -f "$SPECTRAL_DIR/original/summary.json" ]]; then
+    log "Phase 3c: original spectral analysis already exists — skipping"
+else
+    log "Phase 3c: spectral analysis of original model ..."
+    python3 "$REPO_ROOT/scripts/analyze_checkpoint_spectra.py" \
+        --checkpoint "$MODEL" \
+        --label original \
+        --output-dir "$SPECTRAL_DIR/original" \
+        --ratios 0.05 0.10 0.15 0.20 0.25 0.30
+    log "Phase 3c: done"
+fi
+
 # ── Phase 4 & 5: Sequential OSFT training + per-task MMLU ────────────────────
 log "Phase 4+5: sequential OSFT training ..."
 bash "$REPO_ROOT/scripts/train_trace_osft.sh" \
@@ -97,13 +113,20 @@ bash "$REPO_ROOT/scripts/train_trace_osft.sh" \
     --n-gpus 1 \
     --max-tokens-per-gpu 8192 \
     --batch-size 128 \
-    --unfreeze-rank-ratio 0.25 \
+    --unfreeze-rank-ratio "$UNFREEZE_RANK_RATIO" \
     --max-epochs 3 \
     --no-liger-kernels \
-    --skip-trace-eval
+    --skip-trace-eval \
+    --spectral-dir "$SPECTRAL_DIR"
 log "Phase 4+5: done"
 
 # ── Phase 6: Report ───────────────────────────────────────────────────────────
-log "Phase 6: collecting results ..."
+log "Phase 6: collecting MMLU results ..."
 python3 "$REPO_ROOT/scripts/collect_mmlu.py" --results-dir "$RESULTS_DIR"
+
+# ── Phase 7: Aggregate spectral analysis ─────────────────────────────────────
+log "Phase 7: aggregating spectral reports ..."
+python3 "$REPO_ROOT/scripts/aggregate_spectral_reports.py" \
+    --scan-dir "$SPECTRAL_DIR" \
+    --output-dir "$SPECTRAL_DIR/summary"
 log "All done. Full log at $LOG_FILE"

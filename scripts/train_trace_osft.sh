@@ -42,12 +42,13 @@ RESULTS_DIR="results"
 N_GPUS=1
 MAX_TOKENS_PER_GPU=2048
 BATCH_SIZE=128
-UNFREEZE_RANK_RATIO="0.25"
+UNFREEZE_RANK_RATIO="0.10"
 START_TASK=""   # empty = auto-detect from existing checkpoints
 MAX_EPOCHS=3
 USE_LIGER_KERNELS=true
 SKIP_TRACE_EVAL=false
 SKIP_MMLU_EVAL=false
+SPECTRAL_DIR=""
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -66,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         --no-liger-kernels)     USE_LIGER_KERNELS=false;  shift ;;
         --skip-trace-eval)      SKIP_TRACE_EVAL=true;     shift ;;
         --skip-mmlu-eval)       SKIP_MMLU_EVAL=true;      shift ;;
+        --spectral-dir)         SPECTRAL_DIR="$2";        shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
@@ -273,6 +275,24 @@ for i in "${!TASKS[@]}"; do
                 --batch_size auto \
                 --output_path "$MMLU_OUT"
             echo "── MMLU complete: $MMLU_OUT ──"
+        fi
+    fi
+
+    # ── Spectral analysis ────────────────────────────────────────────────────
+    if [[ -n "$SPECTRAL_DIR" ]]; then
+        SPECTRAL_OUT="$SPECTRAL_DIR/task_${TASK_NUM}_${TASK}"
+        if [[ -f "$SPECTRAL_OUT/summary.json" ]]; then
+            echo "── Skipping spectral analysis for task $TASK_NUM (already exists) ──"
+        else
+            echo ""
+            echo "── Spectral analysis after task $TASK_NUM ──"
+            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            python3 "$SCRIPT_DIR/analyze_checkpoint_spectra.py" \
+                --checkpoint "$CURRENT_MODEL" \
+                --label "task_${TASK_NUM}_${TASK}" \
+                --output-dir "$SPECTRAL_OUT" \
+                --ratios 0.05 0.10 0.15 0.20 0.25 0.30
+            echo "── Spectral analysis complete: $SPECTRAL_OUT ──"
         fi
     fi
 
