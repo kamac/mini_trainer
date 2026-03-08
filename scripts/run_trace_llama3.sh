@@ -13,15 +13,16 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 MODEL="Qwen/Qwen2.5-3B-Instruct"
 TRACE_RAW="/tmp/TRACE"
 TRACE_TOK="/tmp/TRACE_tokenized_qwen25"
 CKPT_ROOT="/tmp/checkpoints/trace_osft_qwen25"
-RESULTS_DIR="/tmp/results_qwen25"
+RESULTS_DIR="$REPO_ROOT/results"
 SVD_MODEL="$CKPT_ROOT/svd_truncated_baseline"
 LOG_FILE="/tmp/trace_qwen25_run.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN:-}"  # set HF_TOKEN in your environment
 # Use SDPA instead of flash-attn (not installed)

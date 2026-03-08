@@ -1,0 +1,7 @@
+# Exclude large lm_eval model cache dirs (model weights re-downloaded if needed)
+# Keep all result JSON/CSV/PNG files
+
+# lm_eval sometimes writes model cache here
+*.bin
+*.safetensors
+*.pt
