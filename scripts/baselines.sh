@@ -89,5 +89,10 @@ else
     echo "── 3c complete: $MMLU_DIR/svd_truncated/results.json ──"
 fi
 
+# ── Remove SVD-truncated checkpoint (MMLU is done, weights no longer needed) ──
+echo ""
+echo "── Removing SVD-truncated checkpoint to free disk ──"
+rm -rf "$SVD_CKPT"
+
 echo ""
 echo "Baselines done. Next: bash scripts/train_trace_osft.sh"
