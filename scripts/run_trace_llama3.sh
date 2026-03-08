@@ -117,7 +117,7 @@ bash "$REPO_ROOT/scripts/train_trace_osft.sh" \
     --unfreeze-rank-ratio "$UNFREEZE_RANK_RATIO" \
     --max-epochs 3 \
     --no-liger-kernels \
-    --skip-trace-eval \
+    --trace-raw-dir "$TRACE_RAW" \
     --spectral-dir "$SPECTRAL_DIR"
 log "Phase 4+5: done"
 

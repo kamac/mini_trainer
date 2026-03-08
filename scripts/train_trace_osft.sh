@@ -239,19 +239,20 @@ for i in "${!TASKS[@]}"; do
     else
         echo ""
         echo "── Evaluating TRACE tasks 1–$TASK_NUM after task $TASK_NUM ──"
+        SCRIPT_DIR_EVAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         for j in $(seq 0 $((TASK_NUM - 1))); do
             EVAL_TASK="${TASKS[$j]}"
-            EVAL_OUT="$RESULTS_DIR/${EVAL_TASK}_after_task${TASK_NUM}.json"
+            EVAL_OUT="$RESULTS_DIR/trace/${EVAL_TASK}_after_task${TASK_NUM}.json"
             if [[ -f "$EVAL_OUT" ]]; then
                 echo "   Skipping $EVAL_TASK (result already exists)"
                 continue
             fi
             echo "   Evaluating $EVAL_TASK ..."
-            python /opt/TRACE/metrics.py \
+            python3 "$SCRIPT_DIR_EVAL/eval_trace_task.py" \
                 --model "$CURRENT_MODEL" \
-                --test_file "$TRACE_RAW_DIR/$EVAL_TASK/test.json" \
                 --task "$EVAL_TASK" \
-                --output_file "$EVAL_OUT"
+                --test-file "$TRACE_RAW_DIR/$EVAL_TASK/test.json" \
+                --output-file "$EVAL_OUT"
         done
     fi
 
