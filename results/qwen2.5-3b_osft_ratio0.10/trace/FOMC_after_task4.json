@@ -1,0 +1,30 @@
+{
+  "task": "FOMC",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_4_Py150/hf_format/samples_13656.0",
+  "num_examples": 496,
+  "metrics": {
+    "accuracy": 0.6834677419354839
+  },
+  "predictions": [
+    "B",
+    "B",
+    "A",
+    "C",
+    "C",
+    "C",
+    "C",
+    "C",
+    "B",
+    "A",
+    "C",
+    "C",
+    "B",
+    "C",
+    "B",
+    "C",
+    "C",
+    "C",
+    "C",
+    "C"
+  ]
+}

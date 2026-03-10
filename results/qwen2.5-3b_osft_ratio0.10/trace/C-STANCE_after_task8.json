@@ -1,0 +1,30 @@
+{
+  "task": "C-STANCE",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_8_20Minuten/hf_format/samples_14952.0",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.5305
+  },
+  "predictions": [
+    "A",
+    "B",
+    "A",
+    "B",
+    "C",
+    "A",
+    "A",
+    "C",
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "A",
+    "B",
+    "B",
+    "C",
+    "A",
+    "C",
+    "A"
+  ]
+}

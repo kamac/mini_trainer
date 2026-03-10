@@ -1,0 +1,32 @@
+{
+  "task": "ScienceQA",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_7_NumGLUE-ds/hf_format/samples_15000.0",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.82,
+    "bleu-1": 1.3107214479691566e-25,
+    "rouge-L": 0.0004924314948088258
+  },
+  "predictions": [
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "B",
+    "C",
+    "C",
+    "A",
+    "A",
+    "B",
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "B",
+    "C",
+    "A",
+    "B"
+  ]
+}

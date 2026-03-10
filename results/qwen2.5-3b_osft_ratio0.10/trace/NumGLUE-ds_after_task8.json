@@ -1,0 +1,30 @@
+{
+  "task": "NumGLUE-ds",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_8_20Minuten/hf_format/samples_14952.0",
+  "num_examples": 325,
+  "metrics": {
+    "accuracy": 0.68
+  },
+  "predictions": [
+    "4.17",
+    "7.55",
+    "81.63",
+    "6.67",
+    "1",
+    "7",
+    "78",
+    "14.29",
+    "2",
+    "3",
+    "46",
+    "297",
+    "1734",
+    "2",
+    "300",
+    "968",
+    "224",
+    "4.17",
+    "78.29",
+    "58.33"
+  ]
+}

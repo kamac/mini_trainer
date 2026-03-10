@@ -1,0 +1,30 @@
+{
+  "task": "C-STANCE",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_2_FOMC/hf_format/samples_15000.0",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.5255
+  },
+  "predictions": [
+    "A",
+    "B",
+    "A",
+    "B",
+    "C",
+    "C",
+    "C",
+    "C",
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "A",
+    "B",
+    "C",
+    "C",
+    "C",
+    "C",
+    "A"
+  ]
+}

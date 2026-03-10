@@ -1,0 +1,30 @@
+{
+  "task": "C-STANCE",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_7_NumGLUE-ds/hf_format/samples_15000.0",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.509
+  },
+  "predictions": [
+    "A",
+    "B",
+    "A",
+    "B",
+    "C",
+    "A",
+    "A",
+    "A",
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "A",
+    "B",
+    "B",
+    "C",
+    "A",
+    "C",
+    "A"
+  ]
+}

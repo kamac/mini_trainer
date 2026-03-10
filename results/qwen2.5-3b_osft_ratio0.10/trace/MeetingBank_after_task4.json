@@ -1,0 +1,32 @@
+{
+  "task": "MeetingBank",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_4_Py150/hf_format/samples_13656.0",
+  "num_examples": 692,
+  "metrics": {
+    "bleu-1": 0.26081623568948603,
+    "bleu-4": 0.1882258428738777,
+    "rouge-L": 0.33653953507185475
+  },
+  "predictions": [
+    "Recommendation to the City Manager to work with Public Works and report back in 60 days on current outreach efforts through the Clean Long Beach Initiative and the decals campaign.",
+    "AN ORDINANCE relating to the Department of Finance; authorizing the Director of the Department of Finance to sell the property located at 12001 28th Avenue and the property located at 12001 30th Avenue in the second division of the Northeast Quarter of Section",
+    "is a really important resolution to advance.",
+    "Application of 2203 East Lake Avenue East LLC, to rezone land at 22 or 3 East Lake Avenue East from Neighborhood Commercial 1 (NC1) to Neighborhood Commercial 2 (NC2), Residential Commercial 2 (RC2), Neighborhood Commercial 2 (NC2) and Ped",
+    "to this item.",
+    "Request for an extension to the Conditional Approval of a petition to Swedish Health Services to vacate the alley located on the block between Columbia Street, Minor Avenue, Cherry Street and Boren Avenue.  (Clerk File 314304)",
+    "Brooks and others.",
+    "Recommendation to receive supporting documentation into the record, conclude the public hearing and grant an Entertainment Permit with conditions on the application of Food Restaurant 1223 East Anaheim Street for Entertainment With Dancing.  (District 6)",
+    "AN ORDINANCE relating to the Department of Parks and Recreation; authorizing the Superintendent of Parks and Recreation to sign a lease with Sprint Communications Company, L.P., for continuing use of subsurface fiber optic cable installed in the Berryl Gilman Trail.",
+    "Recommendation to adopt resolution requesting that the Board of Harbor Commissioners approve the transfer of 5 percent of Fiscal Year 2018 gross operating revenue from the Harbor Revenue Fund (SR 101) to the Sportfishing Operation Fund (SR 102).  (Citywide)",
+    "Recommendation to authorize City Manager, or designee, to execute a First Amendment to Agreement No. 33887 with Long Beach Transit, to extend the agreement for six months to provide sufficient time to optimize the Belmont Shore Employee Rider Pass Program; and \r\n\r\nIncrease appropriations in the General Fund (GF) in",
+    "'m sorry.",
+    "the information to the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the public and the",
+    "time I will be pushing for more concrete action to end youth detention in the next legislative session.",
+    "AN ORDINANCE relating to elections; prohibiting foreign influence corporations from making independent expenditures or contributing to campaigns or independent expenditure committees; amending Section 2.04.010, Section 2.04.020, Section 2.04.030, Section 2.",
+    "AN ORDINANCE relating to land use and zoning; defining the addition of a single development that includes residential uses at a community or technical college located within an urban center; amending Sections 25.09.010, 25.09.020, 25.0",
+    "ce to the request.",
+    "demolition process is expedited.",
+    "from our families and from our students. And the last thing we did was we did a review of the data from the Youth Risk Behavior Survey. And the data from the Youth Risk Behavior Survey is done by the Alameda County Health Department and it's done every two years. And it's a survey of all the students",
+    "and it's not on the internet. And it's not in the packet. And it's not in the internet. And it's not in the packet. And it's not in the packet. And it's not in the packet. And it's not in the packet. And it's not in the packet."
+  ]
+}
