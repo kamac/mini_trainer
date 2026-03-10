@@ -75,11 +75,11 @@ A few things stand out:
 
 **FOMC causes a significant trough.** FOMC is a Fed monetary policy classification task where the labels are single characters: A, B, or C. After training on it, MMLU drops from 58.6% to 49.2% — a −9.4pp hit.
 
-I initially attributed this to something like output rank collapse ([Nait Saada et al., 2024](https://arxiv.org/abs/2410.07799)) — the model's output diversity collapsing under the pressure of narrow labels. But after re-training the FOMC checkpoint and running inference on a 200-question MMLU sample, the actual mechanism turns out to be much more mundane:
+After re-training the FOMC checkpoint and running inference on a 200-question MMLU sample, the mechanism becomes concrete. [Nait Saada et al. (2024)](https://arxiv.org/abs/2410.07799) describe rank collapse as tokens converging toward identical representations — here, the output distribution collapses in exactly that sense, just at the label level:
 
 <center><img src="visualizations/fomc_label_artifact.png" alt="FOMC label distribution artifact" width="720" /></center>
 
-**FOMC is a 3-class task. MMLU is 4-class. The model simply stops predicting D.**
+**FOMC is a 3-class task. MMLU is 4-class. The model stops predicting D entirely.**
 
 The FOMC training set contains A, B, and C labels only — D never appears. After fine-tuning, the model assigns near-zero probability to D (0.5% of predictions vs D being the correct answer 26.9% of the time). On questions where the correct answer is D:
 
