@@ -1,55 +1,41 @@
-# Teaching a Language Model Eight Things Without Forgetting Any of Them
-
-*An experiment in continual learning with Orthogonal Subspace Fine-Tuning on Qwen2.5-3B-Instruct*
-
+---
+title: "Teaching a 3B model eight things without forgetting any of them"
+summary: "Exploring continual learning on the TRACE benchmark with Orthogonal Subspace Fine-Tuning — training Qwen2.5-3B on 8 sequential tasks while measuring forgetting, spectral capacity, and MMLU degradation."
+date: "2026-03-10"
+media:
+  type: "image"
+  url: "/trace-osft/forgetting_heatmap.png"
+  alt: "Heatmap showing per-task performance across all 8 training stages"
 ---
 
-## The Problem: Catastrophic Forgetting
+# Teaching a 3B model eight things without forgetting any of them
 
-When you fine-tune a neural network on a new task, it tends to forget what it already knew. This is **catastrophic forgetting** — the weights that encoded previous knowledge get overwritten as the model adapts to new data. For large language models deployed in practice, this is a serious obstacle: you can't simply keep retraining the same model on new tasks without degrading everything it learned before.
+The classic problem with fine-tuning is that it forgets. You take a pretrained model, train it on task A, and it gets good at task A — but quietly starts failing at everything else. Do it sequentially across multiple tasks and the degradation compounds. This is called **catastrophic forgetting**, and it's a serious obstacle if you want to keep teaching a deployed model new things over time.
 
-The [TRACE benchmark](https://arxiv.org/abs/2310.05792) was designed to measure this problem. It presents 8 diverse tasks sequentially:
+The [TRACE benchmark](https://arxiv.org/abs/2310.05792) was designed to measure exactly this. It presents 8 diverse tasks in sequence — stance detection, Fed policy classification, meeting summarisation, Python code completion, science QA, numerical reasoning (twice), and German news summarisation — and asks you to train on all of them without destroying what you learned on the earlier ones.
 
-| # | Task | Type | Metric |
-|---|------|------|--------|
-| 1 | C-STANCE | Chinese stance detection | Accuracy |
-| 2 | FOMC | Fed monetary policy classification | Accuracy |
-| 3 | MeetingBank | Meeting summarisation | BLEU / ROUGE-L |
-| 4 | Py150 | Python code completion | Fuzzy similarity |
-| 5 | ScienceQA | Science multi-choice + reasoning | Accuracy + BLEU |
-| 6 | NumGLUE-cm | Numerical reasoning (commonsense) | Accuracy |
-| 7 | NumGLUE-ds | Numerical reasoning (diverse) | Accuracy |
-| 8 | 20Minuten | German news summarisation | BLEU / ROUGE-L |
+In this post, I'll walk through an experiment using **Orthogonal Subspace Fine-Tuning (OSFT)** on Qwen2.5-3B-Instruct, covering how I picked the training configuration, what the results actually look like, and a few things that surprised me.
 
-The goal: train on all 8, one at a time, while preserving performance on everything you've already learned.
+## The approach: OSFT
 
----
+The idea behind OSFT is simple but clever. Every weight matrix has a singular value decomposition **W = UΣV^T**. The large singular values correspond to the "important" directions — the ones that carry the bulk of the model's representation power. Small singular values correspond to a low-energy subspace that mostly gets ignored during inference.
 
-## The Approach: OSFT
+OSFT's bet: if you restrict all gradient updates to happen in the *small* singular value subspace, you avoid overwriting the knowledge encoded in the dominant directions. New tasks get learned in the leftover space; old tasks stay put in the high-energy subspace that nobody touches.
 
-**Orthogonal Subspace Fine-Tuning (OSFT)** is a continual learning technique that tries to sidestep overwriting by restricting *where* new learning happens in weight space.
+The single hyperparameter you care about is `r` — the **unfreeze rank ratio**. It controls what fraction of the singular components (from the bottom) are trainable:
 
-The key idea: every weight matrix has a singular value decomposition **W = UΣV^T**. The largest singular values correspond to the "important" directions — the ones most responsible for the model's general capabilities. OSFT reserves those directions and only allows updates in the subspace spanned by the **smallest** singular value components.
+- Freeze the top **(1 − r)** fraction
+- Allow gradient flow through the bottom **r** fraction
 
-Formally, for a weight matrix **W ∈ ℝ^{m×n}** with SVD **W = UΣV^T**:
-- Freeze the top **(1 − r)** fraction of singular components
-- Allow gradient flow only through the bottom **r** fraction
+The question is: how do you pick `r`?
 
-The parameter `r` — the **unfreeze rank ratio** — controls the trade-off between plasticity (can the model learn?) and stability (does it retain what it knew?).
+## Picking the ratio with spectral analysis
 
----
-
-## Choosing the Right Ratio: Spectral Analysis
-
-Before training, we ran an SVD on every weight matrix in Qwen2.5-3B-Instruct and measured the **spectral mass** at each candidate ratio: how much of the model's total Frobenius norm energy lives in the bottom-r subspace?
-
-![Ratio selection chart](spectral/summary/ratio_selection.png)
-
-The spectral mass is defined as:
+Before running any training, I did an SVD sweep across every weight matrix in Qwen2.5-3B-Instruct to understand how much of the model's total Frobenius norm energy lives in the low-rank subspace at various thresholds. I'll call this **spectral mass**:
 
 $$\text{mass}(r) = \frac{\sum_{i > (1-r)p} \sigma_i^2}{\sum_i \sigma_i^2}$$
 
-Results for the original model:
+<center><img src="spectral/summary/ratio_selection.png" alt="Spectral mass vs ratio" width="600" /></center>
 
 | Ratio | Spectral mass |
 |-------|--------------|
@@ -57,14 +43,88 @@ Results for the original model:
 | 0.10  | 1.69% |
 | 0.15  | 2.90% |
 | 0.20  | 4.38% |
-| **0.25** | **6.08%** |
+| 0.25  | 6.08% |
 | 0.30  | 8.04% |
 
-We initially ran with ratio=0.25 and observed catastrophic MMLU degradation. Switching to **ratio=0.10** (1.69% spectral mass) produced stable results — the model can still learn without disrupting the dominant knowledge-encoding directions.
+I initially ran with `r=0.25`, saw catastrophic MMLU degradation, and switched to `r=0.10`. At 0.10, only 1.69% of spectral mass is in the trainable subspace — the model has room to learn but we're not touching anything important.
 
-> **A subtle point**: spectral mass measures singular *value magnitudes*, not the directions the model actually learned. OSFT primarily rotates singular *vectors* (U, V) rather than changing magnitudes (Σ). This is why the spectral summary barely changes across tasks (see table below) — the metric is a proxy for "how much capacity are we reserving", not a direct readout of knowledge encoded per task.
+One thing worth flagging: spectral mass is measuring singular value *magnitudes*. OSFT primarily works by rotating singular *vectors* (U, V), not by changing magnitudes (Σ). So the table above is really telling you "how much capacity are we reserving" — it's a proxy, not a direct readout of what the model learns. I'll come back to this.
 
-Spectral mass across all 8 tasks (barely moves — as expected):
+## The SVD-truncated baseline
+
+Before fine-tuning anything, I created a sanity-check baseline: a version of Qwen2.5-3B where I *zeroed out* the bottom 10% of each weight matrix's singular components. No training — just ablation. If those components are noise, performance should be roughly unchanged.
+
+| Model | MMLU (5-shot) |
+|-------|--------------|
+| Original Qwen2.5-3B | **66.5%** |
+| SVD-truncated (bottom 10% zeroed) | **24.0%** |
+
+That's a **−42.5pp** drop from erasing 1.69% of spectral mass. The low-rank subspace is not noise.
+
+This is actually consistent with what [Staats, Thamm & Rosenow (2024)](https://arxiv.org/abs/2410.17770) find in their random matrix analysis of BERT, Pythia, and Llama: small singular values matter — particularly once the model has been fine-tuned — and their corresponding singular vectors substantially overlap with eigenvectors of the activation covariance matrix. In other words, these components are exactly where the model routes task-specific information during inference. Zeroing them out removes that routing.
+
+OSFT doesn't zero these components. It trains *within* them, which is why the model can keep learning without destroying its existing capabilities.
+
+## MMLU trajectory across 8 tasks
+
+I tracked MMLU (5-shot, 57 subtasks) after each OSFT training stage:
+
+<center><img src="visualizations/mmlu_trajectory.png" alt="MMLU accuracy across 8 sequential tasks" width="680" /></center>
+
+A few things stand out:
+
+**FOMC causes a significant trough.** FOMC is a Fed monetary policy classification task where the labels are single characters: A, B, or C. After training on it, MMLU drops from 58.6% to 49.2% — a −9.4pp hit. My read is that FOMC's narrow label distribution temporarily collapses the model's output diversity. [Nait Saada, Naderi & Tanner (2024)](https://arxiv.org/abs/2410.07799) describe a related phenomenon in attention layers they call **rank collapse**, where a spectral gap between the largest singular values causes tokens to converge toward identical representations. Training on single-character classification outputs seems to induce something analogous here — the model's output space gets pushed into a low-rank regime that degrades multi-class reasoning across MMLU.
+
+**The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%, but the recovery from the FOMC trough is real and meaningful.
+
+## Task performance: baseline vs OSFT
+
+How much did the model actually learn?
+
+<center><img src="visualizations/baseline_vs_final.png" alt="Baseline vs OSFT performance per task" width="680" /></center>
+
+| Task | Baseline | After OSFT | Δ |
+|------|----------|-----------|---|
+| C-STANCE (accuracy) | 54.7% | 52.1% | −2.6pp |
+| FOMC (accuracy) | 55.4% | 67.7% | +12.3pp |
+| MeetingBank (ROUGE-L) | 19.4% | 33.9% | +14.5pp |
+| Py150 (similarity) | 21.4 | 55.5 | +34.1 |
+| ScienceQA (accuracy) | 80.0% | 90.9% | +10.9pp |
+| NumGLUE-cm (accuracy) | 4.9% | 67.9% | +63.0pp |
+| NumGLUE-ds (accuracy) | 1.2% | 68.6% | +67.4pp |
+| 20Minuten (ROUGE-L) | 15.7% | 18.3% | +2.6pp |
+
+The NumGLUE tasks are the most dramatic. The base model was essentially guessing (1–5%), and OSFT fine-tuning brought both to ~68%. ScienceQA improved from a strong 80% baseline to 91%.
+
+C-STANCE is the only regression at −2.6pp, but as we'll see next, it holds that score well through all subsequent training.
+
+## Catastrophic forgetting: the full picture
+
+This is the real test. After training on later tasks, how much does the model forget the earlier ones?
+
+<center><img src="visualizations/forgetting_heatmap.png" alt="Per-task performance across all training stages" width="700" /></center>
+
+Each row is a task; each column is a point in time (right after training on that task). The diagonal is performance immediately after fine-tuning. Off-diagonal entries show how much survives as more tasks are piled on top.
+
+A few things worth highlighting:
+
+**C-STANCE holds up across all 8 tasks.** It starts at 52.1% after task 1 and ends at 53.1% after task 8 — seven more training stages, essentially zero forgetting. This is OSFT doing its job: subsequent updates can't touch what's encoded in the high-energy subspace.
+
+**FOMC actually improves over time.** It scores 67.7% right after task 2 training, and drifts up to 70.4% by task 8. This is unexpected — later tasks seem to *refine* the FOMC representation rather than overwrite it.
+
+**MeetingBank and NumGLUE are stable once learned.** No meaningful degradation after their respective training stages.
+
+## C-STANCE retention in detail
+
+C-STANCE being task 1 makes it the harshest test: everything gets trained on top of it.
+
+<center><img src="visualizations/cstance_retention.png" alt="C-STANCE retention across all 8 tasks" width="620" /></center>
+
+The score stays within ±2pp of its initial value the entire time. The orthogonal subspace constraint is doing exactly what it promises.
+
+## A caveat on the spectral analysis
+
+One thing I want to be honest about: I tracked spectral mass at each checkpoint, expecting it to reflect how much the model had "filled up" its low-rank subspace. It barely moved:
 
 | Checkpoint | mass@0.10 | mass@0.20 | mass@0.30 |
 |-----------|-----------|-----------|-----------|
@@ -73,138 +133,36 @@ Spectral mass across all 8 tasks (barely moves — as expected):
 | after task 4 (Py150) | 1.72% | 4.43% | 8.09% |
 | after task 8 (20Minuten) | 1.75% | 4.48% | 8.14% |
 
----
+This makes sense in retrospect. Spectral mass tracks singular value *magnitudes*. OSFT rotates singular *vectors* — the U and V matrices — without changing the magnitudes much. The learning is happening in the *directions* the subspace spans, not in how much energy sits there. A better metric would track subspace drift: how much do the singular vectors themselves rotate across checkpoints. That's left as a future exercise.
 
-## The SVD-Truncated Baseline
+## What worked and what didn't
 
-Before any fine-tuning, we created an **SVD-truncated** baseline: a version of Qwen2.5-3B where the bottom 10% of each weight matrix's singular components are zeroed out — no training, just ablation.
+**Worked well:**
+- Preserving earlier tasks through later training — C-STANCE retention is near-perfect, FOMC actually improves
+- Large gains on near-zero baseline tasks (NumGLUE, Py150)
+- MMLU recovery after the FOMC trough
 
-MMLU results tell the story:
-
-| Model | MMLU (5-shot) |
-|-------|--------------|
-| Original Qwen2.5-3B | **66.5%** |
-| SVD-truncated (bottom 10% zeroed) | **24.0%** |
-
-The truncated model drops catastrophically — **−42.5pp**. This is surprising given those components only hold 1.69% of spectral mass. It tells us the low-rank subspace, while small in energy, is not noise: it carries real information the model relies on.
-
-This result is consistent with [Staats, Thamm & Rosenow (2024)](https://arxiv.org/abs/2410.17770), who apply random matrix theory to pretrained transformers (BERT, Pythia, Llama) and find that *small singular values matter — but mainly once the model has been fine-tuned*. In their analysis, singular vectors corresponding to outlier (non-noise) values substantially overlap with eigenvectors of the activation covariance matrix — i.e., the directions the model actually activates during inference. Zeroing those components, as our SVD-truncated baseline does, removes exactly the structure the model depends on.
-
-OSFT does not zero these components. It trains *within* that subspace, which is why the model can learn without destroying its general capabilities.
-
----
-
-## General Knowledge: The MMLU Trajectory
-
-We tracked MMLU accuracy (5-shot, 57 subtasks) after every OSFT task:
-
-![MMLU trajectory](visualizations/mmlu_trajectory.png)
-
-A few things stand out:
-
-**FOMC causes a significant trough.** After training on FOMC (Fed policy classification — labels are single letters: A/B/C), MMLU drops from 58.6% to 49.2% (−9.4pp). FOMC's narrow label distribution appears to collapse the model's output diversity — a phenomenon related to what [Nait Saada, Naderi & Tanner (2024)](https://arxiv.org/abs/2410.07799) call **rank collapse**: when the effective rank of a layer's representations shrinks, tokens converge toward identical outputs and the model loses discriminative capacity. In our case, training on single-letter labels (A/B/C) pushes the model into a low-rank output regime that temporarily degrades multi-class reasoning across MMLU.
-
-**The model recovers.** By task 5 (ScienceQA), MMLU has climbed back to 60.3%. By task 8, it reaches 60.2% — still −6.3pp from the original 66.5%, but the recovery after FOMC is clear.
-
-The trajectory suggests the early tasks (C-STANCE, FOMC) have an outsized impact on general capabilities, while later tasks in more diverse domains (ScienceQA, NumGLUE) help restore it.
-
----
-
-## Task Performance: Baseline vs. OSFT
-
-How much did the model actually learn from each task?
-
-![Baseline vs final performance](visualizations/baseline_vs_final.png)
-
-The gains are substantial — particularly on the tasks where the base model was near-zero:
-
-| Task | Baseline | After OSFT | Δ |
-|------|----------|-----------|---|
-| C-STANCE (acc) | 54.7% | 52.1% | −2.6pp |
-| FOMC (acc) | 55.4% | 67.7% | +12.3pp |
-| MeetingBank (ROUGE-L) | 19.4% | 33.9% | +14.5pp |
-| Py150 (similarity) | 21.4 | 55.5 | +34.1 |
-| ScienceQA (acc) | 80.0% | 90.9% | +10.9pp |
-| NumGLUE-cm (acc) | 4.9% | 67.9% | +63.0pp |
-| NumGLUE-ds (acc) | 1.2% | 68.6% | +67.4pp |
-| 20Minuten (ROUGE-L) | 15.7% | 18.3% | +2.6pp |
-
-The NumGLUE tasks are the most dramatic: the base model was essentially guessing (1–5%), and OSFT fine-tuning brought both to ~68%. ScienceQA improved from a strong 80% baseline to 91%.
-
-C-STANCE is the only regression (−2.6pp), but notably the model is still competitive — and as we'll see, it largely holds that through subsequent training.
-
----
-
-## Catastrophic Forgetting: The Full Picture
-
-The key question for continual learning: after training on later tasks, how much does the model forget earlier ones?
-
-![Forgetting heatmap](visualizations/forgetting_heatmap.png)
-
-Each row is a task, each column is a snapshot in time (right after training on that task). The diagonal shows performance *when the task was just trained*. Off-diagonal values show retention.
-
-**Reading the heatmap:**
-- Warm colours = high performance (relative to that task's peak)
-- Cool colours = degraded performance
-
-**Key observations:**
-
-1. **C-STANCE is remarkably stable.** It scores 52.1% right after training (task 1), and holds at 53.1% all the way through task 8. Training seven more tasks on top of it caused essentially zero forgetting. This is OSFT working as intended.
-
-2. **FOMC actually improves over time.** After task 2 training: 67.7%. After task 8: 70.4%. The orthogonal subspace updates from later tasks seem to *refine* FOMC performance rather than overwrite it.
-
-3. **MeetingBank and NumGLUE are stable once learned.** Their scores show little degradation in subsequent tasks.
-
-4. **20Minuten (task 8) is the last task** — we don't see post-training forgetting for it.
-
----
-
-## C-STANCE Retention in Detail
-
-![C-STANCE retention](visualizations/cstance_retention.png)
-
-C-STANCE is the harshest test of OSFT's anti-forgetting guarantee: it's trained first, then seven more tasks are learned on top. The score stays within ±2pp of its initial value throughout.
-
-This is the core OSFT result: **knowledge in the high-rank subspace is left untouched**. Because subsequent tasks only update the low-rank subspace, and C-STANCE's representation is encoded primarily in the high-rank directions, it survives.
-
----
-
-## What OSFT Can and Cannot Do
-
-Based on this experiment:
-
-**OSFT works well for:**
-- Tasks that encode naturally in the low-rank subspace (NumGLUE, Py150, ScienceQA)
-- Preserving previously-learned tasks (C-STANCE retention is near-perfect)
-- Scaling across diverse task types without catastrophic forgetting
-
-**OSFT struggles with:**
-- Tasks with very narrow label distributions (FOMC's single-letter labels cause temporary general capability degradation)
-- Measuring learning progress via spectral metrics — the singular values barely move even though the model is learning. Better diagnostics would track subspace *direction* changes, not just magnitudes.
+**Didn't work as well:**
+- MMLU never fully recovers to the original 66.5% — whether that's fundamental to OSFT or a training budget issue, I don't know
+- 20Minuten only improved by +2.6pp ROUGE-L, despite being the last task with no forgetting pressure
+- The spectral mass metric turned out to be the wrong thing to track
 
 **Open questions:**
-- The SVD-truncated baseline dropping 42pp despite only 1.69% spectral mass suggests the low-rank subspace encodes more than its energy suggests. What is it encoding?
-- At ratio=0.10, MMLU never fully recovers to the original 66.5%. Is this fundamental to OSFT, or a training hyperparameter issue?
-- The FOMC trough recovery suggests some form of "consolidation" happens during later tasks. Is this an OSFT property or a general fine-tuning property?
-
----
+- The SVD-truncated model dropping 42.5pp despite holding only 1.69% of spectral mass suggests these components encode more than their energy would imply. What exactly? The overlap with activation covariance eigenvectors [Staats et al.](https://arxiv.org/abs/2410.17770) identified is a strong lead.
+- FOMC's recovery over subsequent tasks — is this a property of OSFT specifically, or does it happen with regular fine-tuning too?
 
 ## Setup
 
 - **Model**: Qwen/Qwen2.5-3B-Instruct
-- **OSFT ratio**: 0.10 (bottom 10% of each weight matrix's singular components are trainable)
-- **Training**: 3 epochs per task, cosine LR schedule, 2e-4 peak LR, batch size 128
-- **Evaluation**: MMLU 5-shot (lm-evaluation-harness), custom TRACE task evaluation
+- **OSFT ratio**: 0.10 (bottom 10% of singular components per weight matrix)
+- **Training**: 3 epochs per task, cosine LR schedule, peak LR 2e-4, batch size 128
+- **Evaluation**: MMLU 5-shot via lm-evaluation-harness; custom inference script for TRACE tasks
 - **Hardware**: Single GPU
 
----
-
-*Experiment code: [mini_trainer](https://github.com/maciejkozik3/mini-trainer)*
-
----
+All experiment code is in [mini_trainer](https://github.com/maciejkozik3/mini-trainer).
 
 ## References
 
-- Baijiong Lin et al. (2023). **TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models.** arXiv:2310.05792.
-- Max Staats, Matthias Thamm & Bernd Rosenow (2024). **Small Singular Values Matter: A Random Matrix Analysis of Transformer Models.** arXiv:2410.17770.
-- Thiziri Nait Saada, Alireza Naderi & Jared Tanner (2024). **Mind the Gap: a Spectral Analysis of Rank Collapse and Signal Propagation in Attention Layers.** arXiv:2410.07799.
+- Baijiong Lin et al. (2023). **TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models.** [arXiv:2310.05792](https://arxiv.org/abs/2310.05792).
+- Max Staats, Matthias Thamm & Bernd Rosenow (2024). **Small Singular Values Matter: A Random Matrix Analysis of Transformer Models.** [arXiv:2410.17770](https://arxiv.org/abs/2410.17770).
+- Thiziri Nait Saada, Alireza Naderi & Jared Tanner (2024). **Mind the Gap: a Spectral Analysis of Rank Collapse and Signal Propagation in Attention Layers.** [arXiv:2410.07799](https://arxiv.org/abs/2410.07799).
