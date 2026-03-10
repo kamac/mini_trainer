@@ -205,6 +205,8 @@ I'm excited to see where this goes. Full credit to Nayak, Killamsetty, Han et al
 
 All experiment code is in [mini_trainer](https://github.com/maciejkozik3/mini-trainer).
 
+For the curious: the full experiment cost ~$28 on a single A40 GPU.
+
 ## References
 
 - Baijiong Lin et al. (2023). **TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models.** [arXiv:2310.05792](https://arxiv.org/abs/2310.05792).
