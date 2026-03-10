@@ -185,10 +185,6 @@ What the metric *can't* tell you is where within that subspace the learning happ
 - 20Minuten only improved by +2.6pp ROUGE-L, despite being the last task with no forgetting pressure
 - Watch out for tasks whose label space is a strict subset of your evaluation benchmark — the FOMC/MMLU issue (A/B/C training vs A/B/C/D eval) caused a mechanical 17pp MMLU drop entirely unrelated to knowledge loss
 
-**Open questions:**
-- The SVD-truncated model dropping 42.5pp despite holding only 1.69% of spectral mass suggests these components encode more than their energy would imply. What exactly? The overlap with activation covariance eigenvectors [Staats et al.](https://arxiv.org/abs/2410.17770) identified is a strong lead.
-- FOMC's recovery was driven by re-exposure to D-labeled outputs in later tasks. But the model still ends up −6.3pp below baseline on MMLU overall — is that residual gap also label-distribution related, or genuine capability loss?
-
 ## Setup
 
 - **Model**: Qwen/Qwen2.5-3B-Instruct
