@@ -111,7 +111,7 @@ Social Sciences takes the biggest hit only because it had the highest baseline a
 
 The trend (r = −0.40) — stronger subtasks drop more — is explained by the same artifact: high-accuracy subjects had a higher proportion of correct D answers that the model was getting right. After FOMC, it gets all of them wrong. Low-accuracy subjects had weak D performance to begin with, so there's less to lose.
 
-**The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%, but the recovery from the FOMC trough is real and meaningful.
+**The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%.
 
 ## Task performance: baseline vs OSFT
 
