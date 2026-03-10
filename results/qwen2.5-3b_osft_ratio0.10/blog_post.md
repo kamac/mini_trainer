@@ -88,6 +88,8 @@ MMLU results tell the story:
 
 The truncated model drops catastrophically — **−42.5pp**. This is surprising given those components only hold 1.69% of spectral mass. It tells us the low-rank subspace, while small in energy, is not noise: it carries real information the model relies on.
 
+This result is consistent with [Staats, Thamm & Rosenow (2024)](https://arxiv.org/abs/2410.17770), who apply random matrix theory to pretrained transformers (BERT, Pythia, Llama) and find that *small singular values matter — but mainly once the model has been fine-tuned*. In their analysis, singular vectors corresponding to outlier (non-noise) values substantially overlap with eigenvectors of the activation covariance matrix — i.e., the directions the model actually activates during inference. Zeroing those components, as our SVD-truncated baseline does, removes exactly the structure the model depends on.
+
 OSFT does not zero these components. It trains *within* that subspace, which is why the model can learn without destroying its general capabilities.
 
 ---
@@ -100,7 +102,7 @@ We tracked MMLU accuracy (5-shot, 57 subtasks) after every OSFT task:
 
 A few things stand out:
 
-**FOMC causes a significant trough.** After training on FOMC (Fed policy classification — labels are single letters: A/B/C), MMLU drops from 58.6% to 49.2% (−9.4pp). This suggests FOMC's narrow label distribution temporarily collapses the model's output diversity.
+**FOMC causes a significant trough.** After training on FOMC (Fed policy classification — labels are single letters: A/B/C), MMLU drops from 58.6% to 49.2% (−9.4pp). FOMC's narrow label distribution appears to collapse the model's output diversity — a phenomenon related to what [Nait Saada, Naderi & Tanner (2024)](https://arxiv.org/abs/2410.07799) call **rank collapse**: when the effective rank of a layer's representations shrinks, tokens converge toward identical outputs and the model loses discriminative capacity. In our case, training on single-letter labels (A/B/C) pushes the model into a low-rank output regime that temporarily degrades multi-class reasoning across MMLU.
 
 **The model recovers.** By task 5 (ScienceQA), MMLU has climbed back to 60.3%. By task 8, it reaches 60.2% — still −6.3pp from the original 66.5%, but the recovery after FOMC is clear.
 
@@ -198,3 +200,11 @@ Based on this experiment:
 ---
 
 *Experiment code: [mini_trainer](https://github.com/maciejkozik3/mini-trainer)*
+
+---
+
+## References
+
+- Baijiong Lin et al. (2023). **TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models.** arXiv:2310.05792.
+- Max Staats, Matthias Thamm & Bernd Rosenow (2024). **Small Singular Values Matter: A Random Matrix Analysis of Transformer Models.** arXiv:2410.17770.
+- Thiziri Nait Saada, Alireza Naderi & Jared Tanner (2024). **Mind the Gap: a Spectral Analysis of Rank Collapse and Signal Propagation in Attention Layers.** arXiv:2410.07799.
