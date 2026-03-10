@@ -90,6 +90,20 @@ Two things stand out. First, **Social Sciences takes the biggest hit** (−22pp 
 
 Second, **recovery is eerily uniform across all four categories (~61–67%)**. Subsequent tasks — code completion, science QA, numerical reasoning — restore roughly two-thirds of the FOMC-induced damage regardless of domain. Whatever the repair mechanism is, it's not category-specific.
 
+Drilling down to all 57 individual subtasks reveals a sharper picture:
+
+<center><img src="visualizations/fomc_subtask_drops.png" alt="Per-subtask FOMC drop sorted by severity" width="780" /></center>
+
+The drops are far from uniform — ranging from −3pp (college mathematics) to −33pp (security studies). And the pattern across all 57 subtasks turns out to correlate with the model's *baseline score*:
+
+<center><img src="visualizations/fomc_baseline_vs_drop.png" alt="Baseline accuracy vs FOMC drop per subtask" width="640" /></center>
+
+The trend (r = −0.40): **every 10pp of baseline score predicts ~2pp of extra FOMC-induced drop**. Subjects where the model was already strong fall furthest; subjects where it was already weak are relatively unaffected.
+
+College mathematics is the clearest example — the model scored just 35% before fine-tuning and dropped only 3pp after FOMC. High school world history scored 87% and dropped 32pp. That's a 29pp gap in vulnerability between two subjects in the same MMLU category.
+
+One interpretation: subjects where the model was already confident relied on a rich, well-differentiated output distribution to discriminate between similar answer choices. FOMC's collapsed A/B/C label space disrupts exactly that. Subjects where the model was already near-chance had no such fine-grained distribution to destroy.
+
 **The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%, but the recovery from the FOMC trough is real and meaningful.
 
 ## Task performance: baseline vs OSFT
