@@ -75,6 +75,21 @@ A few things stand out:
 
 **FOMC causes a significant trough.** FOMC is a Fed monetary policy classification task where the labels are single characters: A, B, or C. After training on it, MMLU drops from 58.6% to 49.2% — a −9.4pp hit. My read is that FOMC's narrow label distribution temporarily collapses the model's output diversity. [Nait Saada, Naderi & Tanner (2024)](https://arxiv.org/abs/2410.07799) describe a related phenomenon in attention layers they call **rank collapse**, where a spectral gap between the largest singular values causes tokens to converge toward identical representations. Training on single-character classification outputs seems to induce something analogous here — the model's output space gets pushed into a low-rank regime that degrades multi-class reasoning across MMLU.
 
+Breaking the damage down by MMLU category makes it stranger:
+
+<center><img src="visualizations/mmlu_category_fomc.png" alt="MMLU category breakdown: original vs after FOMC vs after task 8" width="700" /></center>
+
+| Category | Drop after FOMC | Recovery by task 8 | Net |
+|----------|----------------|-------------------|-----|
+| Humanities | −16.8pp | +10.3pp (61%) | −6.5pp |
+| **Social Sciences** | **−22.0pp** | +14.8pp (67%) | −7.2pp |
+| STEM | −16.0pp | +10.2pp (64%) | −5.8pp |
+| Other | −14.6pp | +9.0pp (62%) | −5.6pp |
+
+Two things stand out. First, **Social Sciences takes the biggest hit** (−22pp vs ~−16pp for everything else), even though FOMC *is* a social science task. You'd expect domain-adjacent knowledge to be preserved — instead it's the most disrupted. The single-letter label format seems to specifically damage the representation space where policy and economics reasoning lives.
+
+Second, **recovery is eerily uniform across all four categories (~61–67%)**. Subsequent tasks — code completion, science QA, numerical reasoning — restore roughly two-thirds of the FOMC-induced damage regardless of domain. Whatever the repair mechanism is, it's not category-specific.
+
 **The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%, but the recovery from the FOMC trough is real and meaningful.
 
 ## Task performance: baseline vs OSFT
