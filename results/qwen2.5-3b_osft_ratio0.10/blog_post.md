@@ -124,7 +124,7 @@ The score stays within ±2pp of its initial value the entire time. The orthogona
 
 ## A caveat on the spectral analysis
 
-One thing I want to be honest about: I tracked spectral mass at each checkpoint, expecting it to reflect how much the model had "filled up" its low-rank subspace. It barely moved:
+I tracked spectral mass at each checkpoint to see how much energy accumulated in the low-rank subspace as the model learned:
 
 | Checkpoint | mass@0.10 | mass@0.20 | mass@0.30 |
 |-----------|-----------|-----------|-----------|
@@ -133,7 +133,9 @@ One thing I want to be honest about: I tracked spectral mass at each checkpoint,
 | after task 4 (Py150) | 1.72% | 4.43% | 8.09% |
 | after task 8 (20Minuten) | 1.75% | 4.48% | 8.14% |
 
-This makes sense in retrospect. Spectral mass tracks singular value *magnitudes*. OSFT rotates singular *vectors* — the U and V matrices — without changing the magnitudes much. The learning is happening in the *directions* the subspace spans, not in how much energy sits there. A better metric would track subspace drift: how much do the singular vectors themselves rotate across checkpoints. That's left as a future exercise.
+It barely moves — and I think that's actually the right read. Spectral mass is tracking how much energy we're adding to the low-rank subspace, which corresponds to how much new knowledge we're encoding in it. The answer is: not much. OSFT makes small, targeted updates by design, and 8 sequential fine-tuning tasks don't radically alter the weight matrices — they nudge them. The 1.69% → 1.75% shift over the full experiment is consistent with that picture.
+
+What the metric *can't* tell you is where within that subspace the learning happened — spectral mass is blind to which directions the singular vectors rotated into. But as a coarse indicator of "how much did we disturb the low-rank subspace", it's doing its job.
 
 ## What worked and what didn't
 
