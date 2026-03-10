@@ -181,7 +181,7 @@ What the metric *can't* tell you is where within that subspace the learning happ
 - MMLU recovery after the FOMC trough
 
 **Didn't work as well:**
-- MMLU never fully recovers to the original 66.5% — whether that's fundamental to OSFT or a training budget issue, I don't know
+- MMLU never fully recovers to the original 66.5% — the SVD-truncated baseline shows the low-rank subspace does carry information relevant to general capabilities, and OSFT writes over some of it across 8 tasks. The method is robust but not lossless
 - 20Minuten only improved by +2.6pp ROUGE-L, despite being the last task with no forgetting pressure
 - Watch out for tasks whose label space is a strict subset of your evaluation benchmark — the FOMC/MMLU issue (A/B/C training vs A/B/C/D eval) caused a mechanical 17pp MMLU drop entirely unrelated to knowledge loss
 
