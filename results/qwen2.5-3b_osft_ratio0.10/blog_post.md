@@ -185,6 +185,16 @@ What the metric *can't* tell you is where within that subspace the learning happ
 - 20Minuten only improved by +2.6pp ROUGE-L, despite being the last task with no forgetting pressure
 - Watch out for tasks whose label space is a strict subset of your evaluation benchmark — the FOMC/MMLU issue (A/B/C training vs A/B/C/D eval) caused a mechanical 17pp MMLU drop entirely unrelated to knowledge loss
 
+## Conclusion
+
+I'm genuinely impressed by how robust this turned out to be. Continual learning has been a hard problem for a long time — most approaches either rely on replaying old data or accept significant forgetting as the price of learning something new. OSFT takes a different angle: instead of managing what the model *remembers*, it constrains *where* learning happens. And it works.
+
+The model learned eight diverse tasks sequentially and retained almost everything it had learned from previous ones. General capability (MMLU) degrades slightly over the course of training, which is expected given the low-rank subspace does carry some general knowledge, but the drop is modest enough that I'd consider the method practically viable.
+
+I'm excited to see where this goes. Full credit to Nayak, Killamsetty, Han et al. — the paper ([arXiv:2504.07097](https://arxiv.org/abs/2504.07097)) is worth reading if this sparked your interest!
+
+---
+
 ## Setup
 
 - **Model**: Qwen/Qwen2.5-3B-Instruct
