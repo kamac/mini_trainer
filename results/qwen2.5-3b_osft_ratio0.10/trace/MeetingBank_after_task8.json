@@ -1,0 +1,32 @@
+{
+  "task": "MeetingBank",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_8_20Minuten/hf_format/samples_14952.0",
+  "num_examples": 692,
+  "metrics": {
+    "bleu-1": 0.25312130717908143,
+    "bleu-4": 0.16482980697459346,
+    "rouge-L": 0.3287234900363269
+  },
+  "predictions": [
+    "Recommendation to the City Manager to work with Public Works and report back in 60 days on current outreach efforts through the Clean Long Beach Initiative. In particular, the City's use of decals to direct people to services.",
+    "AN ORDINANCE relating to the Department of Finance; authorizing the sale of four parcels of real property located at 1855 19th Avenue, 1860 19th Avenue, 1865 19th Avenue, and 1870 1",
+    "resolution is a step in the right direction to provide immediate relief to those who are most vulnerable.",
+    "Application of 2203 Eastlake Avenue East LLC, to rezone land at 2203 Eastlake Avenue East from Neighborhood Commercial 1 P 30 to Neighborhood Commercial 2 P 40, and to construct a new building on the property. The Committee approved filing this item at its",
+    "to this petition. The order was approved for filing.",
+    "Recommendation to approve the short title for the record of the meeting.",
+    "Bixby, and David Bixby will be here. So, if you'd like to give them a hand, they'd be thrilled.",
+    "Recommendation to receive supporting documentation into the record, conclude the public hearing and grant an Entertainment Permit with conditions on the application of 1223 East Anaheim Street, Incorporated, dba Udon Restaurant, for Entertainment With Dancing.  (District 6)",
+    "AN ORDINANCE relating to the Department of Parks and Recreation; authorizing the Superintendent of Parks and Recreation to sign a lease with Sprint Communications Company L.P. for continuing use of subsurface fiber optic cable installed in the Bert Gilman Trail.",
+    "Recommendation to adopt resolution authorizing the transfer of 5 percent of the gross operating revenue from the Harbor Revenue Fund to the Thailand Operation Fund.",
+    "Recommendation to authorize City Manager, or designee, to execute a First Amendment to Agreement No. 380000000000000 with Long Beach Transit, to extend the agreement for six months to provide sufficient time to optimize the Belmont Shore Employee Rider Pass Program.  (",
+    "'m glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I'm glad you brought it up. I",
+    "all of those possibilities to you. So I'm glad you're bringing this up. I'd be happy to have that conversation with you. I'm glad you're bringing it up. I'd be happy to have that conversation with you.",
+    "time will be pushing for the city to do a better job of funding community-based organizations that are doing anti-racist work and have been working to eliminate the tension of youth detention. I'm glad to see Councilmember O'Brien support the amendments. I think the community is approved. So I'll defer to you, Council",
+    "AN ORDINANCE relating to elections; prohibiting foreign influence corporations from making independent expenditures or contributing to campaigns and independent expenditure committees; amending Section 2.04.0.10.260.2.70.369.377 of the Seattle Municipal Code and adding a new",
+    "AN ORDINANCE relating to land use and zoning; defining the addition of a single development that includes residential uses at a community or technical college located within an urban center.",
+    "ce to the request. I'm not sure if you've heard of the Boston Cabo Verdeans. We're a community of 100,000 people in the state of Massachusetts. We're the largest Cabo Verdean community in the United States. We're the largest Cabo Verdean community",
+    "demolition process will be calculated. I'm glad that the bill was strengthened in committee. I'm glad that the bill was strengthened in committee. I'm glad that the bill was strengthened in committee. I'm glad that the bill was strengthened in committee. I'm glad that the bill was strengthened in committee. I'm glad",
+    ". So we did all of that and we came up with a number of recommendations. So the recommendations are in the report. I'm not going to read them all, but I will share the top three. So the top three recommendations are to increase the number of mental health professionals in our schools. We have a number",
+    "that was sent out. And it's a new one. So we're a little confused. We've never had this before. We've never had an Entertainment Permit before. We're not sure what to do. We've called the police department and the business services department. We've also called the City Attorney's Office"
+  ]
+}

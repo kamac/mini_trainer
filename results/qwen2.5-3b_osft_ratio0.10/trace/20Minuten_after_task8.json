@@ -1,0 +1,32 @@
+{
+  "task": "20Minuten",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_8_20Minuten/hf_format/samples_14952.0",
+  "num_examples": 200,
+  "metrics": {
+    "bleu-1": 0.1690324691296975,
+    "bleu-4": 0.028420575387650325,
+    "rouge-L": 0.18289219703390538
+  },
+  "predictions": [
+    "In Griechenland steigt die Hitzewelle. Die Temperaturen sollen bis zu 44 Grad Celsius anhalten. Griechenland hat bereits Erinnerungen an extreme Hitzewellen.",
+    "Auf Tiktok zeigt ein Video, wie vier Jugendliche aus einer Gondel springen. Der Stunt wurde bei einem Skigebiet in der Graubündner Alp gefilmt. Der Direktor des Skigebiets nimmt den Stunt nun scharf kritisch. Die K",
+    "Die Youtuberin Nikki Phillippi und ihr Mann haben ihren Hund Bowser, der ihren einjährigen Sohn Logan gebissen hat, einschläfern liessen. Nun hat sie ein letztes Bild des Hundes auf Instagram geteilt. Aufgrund des Videos und des Bildes sind viele ihrer Fans",
+    "Melodie Bühler (23) ist in der Schweiz und in Deutschland erfolgreich. In der Schweiz spielte sie bereits in der ersten Serie \"Domina\" mit. Jetzt ist sie Teil der internationalen Streaming-Serie \"The Last Ship\". Melodie spricht über ihre Karriere, ihre Zür",
+    "Die Badezimmer-Trophy von Coop läuft bis am 7. Februar. Konsumenten, die die Prämien in den Filialen einlösen wollten, müssen jetzt via Onlineshop bestellen. Coop beruhigt die Kunden: Die Prämien seien noch immer",
+    "Wir stellen dir jede Woche die besten neuen Kinostarts vor. Ein Film zeigt, wie es um unseren Planeten steht. Eine Dramaserie löst einen grossen Dramausbruch aus. Ein Regisseur bringt ein Broadway-Musical auf die Bühne.",
+    "Max Heinzer ist der aktuelle Weltmeister im Fechten. Der 33-Jährige aus Zürich nutzt für sein Training eine Maschine, die Pucks abfeuert. Er lässt sich damit von der NHL bewundern. Die NHL ist die höchste Eishockey-Liga",
+    "Die Armee will mit einer Impfkampagne die Ausbreitung des Coronavirus eindämmen. Armeeangehörige, die mehr als vier Wochen Dienst haben, sollen sich impfen lassen können. Soldaten, die sich nicht impfen lassen wollen, müssen sich in Quarantäne begeben",
+    "Am Sonntag fand die 2. Etappe der Tour de France in Nizza statt. Marc Hirschi konnte sich den französischen Publikumsliebling Julian Alaphilippe geschlagen geben. Michael Schär wurde als kämpferischer Fahrer der Etappe ausgezeichnet",
+    "15 Menschen sind in einer 40 Tage lang geschlossenen Käfigartigen Einöde in den Pyrenäen in der Höhle von Lombrives in Frankreich acht Wochen lang gefangen. Sie hatten keinen Kontakt zur Aussenwelt, erfuhren nichts über",
+    "Nina Christen gewinnt das Olympische Rennen der Dreistellungs-Sport. Die 27-Jährige schiebt sich während des Dreistellungs-Wettkampfs auf den ersten Platz. Die Nidwaldnerin gewinnt damit die Goldmedaille. Die Russ",
+    "Cephas Malele ist der zweittreffsichere Schweizer Fussballer im Jahr 2021. Der Stürmer hat in der rumänischen Liga 18 Tore erzielt. Auf Platz sieben steht der FCZ-Lebensversicherer Antonio Marches",
+    "Ein 32-jähriger Schweizer soll im Juni vor dem Basler Strafgericht verantworten sein. Die Staatsanwaltschaft wirft ihm mehrfachen Betrug, Widerhandlung gegen die Covid-19-Solidarbürgschaftsverordnung, mehr",
+    "Nach dem Verfahren gegen 16 Hausbesetzerinnen und Hausbesetzer wurde am Montag ein Urteil gesprochen. Die meisten wurden mit bedingter Geldstrafe bestraft. Der Polizeidirektor und der Präsident des Polizeiverbands sind alles andere als gl",
+    "Das Frachter Wakashio strandete am 1. September auf Mauritius. Seitdem sorgt das Ökodesaster für Wirbel. Die Regierung habe zu wenig reagiert, sagen die Locals. Nun sorgt das für Stimmungsschlag.",
+    "Cardi B (28) hat auf Twitter einen neuen Tweet gepostet. Auf ihn hin wird sie von der Weltberühmten Peppa Pig angegriffen. Die Rapperin nimmt es auf Twitter mit der Zeichentrickfigur auf.",
+    "Wir stellen dir jede Woche die besten neuen Streamingstarts vor. Netflix veröffentlicht die Serie \"Sky Rojo\", in der drei Frauen in einem Bordell arbeiten. Die Serie basiert auf den Erlebnissen von Betroffenen. Auf Amazon Prime gibts die Serie \"The Night Clerk\", in der ein aut",
+    "Die 21-jährige Alishia Bucher aus Adligenswil LU ist am 21. April 2021 vermisst worden. Seitdem ist ihr Aufenthaltsort unbekannt. Ihre Zwillingsschwester hat Flyer verteilt, um Alishia zu",
+    "Roger Federer ist seit längerer Zeit nicht mehr in der Öffentlichkeit aufgetreten. Nun spricht der 39-Jährige Klartext. Er ist sich der Zeitnot bewusst. Und er will sich nicht unnötig unter Druck setzen.",
+    "Die Sicherheitsuntersuchungsstelle Sust hat den Schlussbericht zum Ju-52 Unfall in Graubünden veröffentlicht. Handlungen der Piloten seien zum Absturz geführt haben. Die Flugführung sei hochriskant gewesen."
+  ]
+}

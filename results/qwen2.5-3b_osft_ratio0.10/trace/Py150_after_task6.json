@@ -1,0 +1,30 @@
+{
+  "task": "Py150",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_6_NumGLUE-cm/hf_format/samples_15000.0",
+  "num_examples": 2000,
+  "metrics": {
+    "similarity": 55.061
+  },
+  "predictions": [
+    "return isinstance ( value , str )",
+    "import os",
+    "ze_counter ,",
+    "'<STR_LIT>' ,",
+    ":3> , <NUM_LIT:4> ] ,",
+    "self . failUnless ( n . isInstanceOf ( Gaffer . SceneProcessor . staticTypeId ( ) ) )",
+    "names ( self , fileish ) :",
+    ") :",
+    "from kitsune . postcrash . models import Signature",
+    "ntimes",
+    "data_dict [ field ] = value",
+    "try :",
+    "if filename.endswith ( '<STR_LIT:.gz>' ) :",
+    "def __init__ ( self , cmd_id , param = None ) :",
+    "else :",
+    "data [ '<STR_LIT>' ] = iteration_coordinate",
+    "PREMIUM_RATE_ID = '<STR_LIT>'",
+    "import_module ( '<STR_LIT>' % app )",
+    "self . xmpp . new_message = self . new_message_handler",
+    "workbook = Workbook ( self . got_filename )"
+  ]
+}

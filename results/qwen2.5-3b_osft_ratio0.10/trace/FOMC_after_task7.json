@@ -1,0 +1,30 @@
+{
+  "task": "FOMC",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_7_NumGLUE-ds/hf_format/samples_15000.0",
+  "num_examples": 496,
+  "metrics": {
+    "accuracy": 0.6915322580645161
+  },
+  "predictions": [
+    "B",
+    "C",
+    "A",
+    "C",
+    "C",
+    "A",
+    "C",
+    "C",
+    "B",
+    "A",
+    "C",
+    "C",
+    "A",
+    "C",
+    "B",
+    "A",
+    "A",
+    "A",
+    "C",
+    "C"
+  ]
+}

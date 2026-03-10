@@ -1,0 +1,32 @@
+{
+  "task": "ScienceQA",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.8,
+    "bleu-1": 0.06527689182546689,
+    "rouge-L": 0.14398330152379557
+  },
+  "predictions": [
+    "B. 13 minutes\n\nReasons:\nThe question asks about the duration of a walk with a dog, which typically involves walking for a considerable amount of time. A 13-second walk is far too short to be practical or enjoyable for either the person or the dog. On the other hand, 1",
+    "B. literature\n\nReason: The sentence contains an allusion to the Faust legend, which originates from German literature. The Faust legend tells the story of a scholar who makes a deal with the devil, often involving selling his soul for knowledge or power. This allusion is commonly used in literature to describe a person",
+    "B. physical change\n\nReason: Beating an egg involves changing the shape and structure of the egg white and yolk without altering their chemical composition. This process does not involve the breaking down or formation of new substances, which would be characteristic of a chemical change. Instead, it's a transformation that can be undone by",
+    "B. climate\n\nReason: The statement \"There are usually more days with low air pressure than high air pressure where Martha lives\" is a general description of the atmospheric conditions in Martha's area over a longer period, which is characteristic of climate. Climate refers to the long-term average weather patterns of a region, including temperature",
+    "B. Alliteration\n\nReason: The correct answer is B. Alliteration because the phrase \"clasps the crag with crooked hands\" demonstrates a repetition of the same sound at the beginning of two or more words, which is a form of alliteration. In this case, the repeated 'c' sound creates",
+    "B. Troy will give up the chance to see the lemurs. He would have enjoyed seeing them more than the otters.\n\nReasoning:\nThe question asks about a cost, which typically refers to a financial expense or a sacrifice that results in a loss. In this scenario, Troy's decision to see the otters",
+    "A. hasty generalization: a broad claim based on too few observations\n\nReason: The given statement makes a broad claim about Hampton College being a better school based solely on the fact that it receives more applications for admission than Greenpoint University. This reasoning is flawed because it assumes that the number of applications directly correlates with",
+    "C. look for other routes to the Indian Ocean.\nReasons:\n\n1. **Avoiding Conflict**: Option A involves breaking a treaty and starting a costly war with Portugal. This is a risky and potentially destructive approach that could lead to significant political and economic instability. It's important to consider diplomatic solutions before resorting to",
+    "A. pun\nReason: The phrase \"impossible to put down\" is a pun because it is a play on words. The word \"put down\" can mean both to physically place something down or to stop doing something, but in this context, it's being used to describe how engaging the book is, suggesting",
+    "A. Does milk chocolate or dark chocolate melt faster when heated on the stove?\n\nReasons:\n1. **Relevance to the Question**: The question posed by Tanvi is about the rate at which chocolate melts, specifically focusing on different types of chocolate (milk and dark) under the same heating condition (stove",
+    "B\nReason: \nThe reason I chose B as the correct answer is because cotton is a plant fiber, which is produced by living organisms. Therefore, it is not a mineral, which are naturally occurring inorganic solids with a definite chemical composition and an ordered internal structure. On the other hand, aquamarine (",
+    "B. argue about something\n\nReason: The phrase \"argue about something\" carries a stronger negative connotation compared to \"disagree about something.\" \n\n1. **Intensity of Connotation**: Arguing implies a more intense, confrontational, and often heated exchange of opinions or viewpoints. It suggests a higher level of",
+    "B. Both are chemical changes.\n\nReasons:\n\n1. Deep-frying chicken:\n   - The process involves heating oil to high temperatures.\n   - The chicken proteins denature and undergo chemical reactions with the oil.\n   - New compounds form, such as acrylamide (a potential carcinogen).\n   - This",
+    "B\nReasons:\n\n1. Context and specificity: The question asks to select an animal, which implies we are looking for a living creature that belongs to the kingdom Animalia. Option A refers to a plant (giant water lily), which does not fit this criterion.\n\n2. Biological classification: Animals are multic",
+    "A. personification\n\nReason: The use of \"groaned\" to describe the car is a clear example of personification. Personification is a figure of speech where human qualities are attributed to non-human things. In this case, the car is given the ability to \"groan,\" which is a human action typically",
+    "B\nReasons:\n\n1. Formality Level: Option B uses a more formal tone and structure, which is appropriate for a holiday greeting. It includes a salutation (\"Best wishes\"), a formal expression of intent (\"for an enjoyable\"), and a closing phrase (\"from the entire staff\"). This level of formality is",
+    "B. an underling\n\nReasons:\n\n1. Etymology: The word \"underling\" comes from the Latin \"infernalis,\" meaning \"belonging to or below the surface.\" This etymological root suggests a position beneath others, which is often associated with subordination and lack of authority.\n\n2",
+    "B. Both are caused by heating.\n\nReasons:\n\n1. Melting wax: Wax melting is a process where solid wax transforms into its liquid state. This change occurs when wax is heated, typically to temperatures above its melting point (around 60-70°C or 140-158",
+    "A. 10 fluid ounces\n\nReasons:\nThe volume of a mustard bottle is typically measured in fluid ounces, which is a common unit of measurement for condiments like mustard. The other options (gallons and cups) are much larger units of volume and would not be appropriate for measuring the size of a",
+    "B. hyperbole\nReason: The use of \"likely to die of boredom\" is a hyperbole, which is an exaggeration used for emphasis or effect. In this case, the speaker is not literally saying they will die from boredom but is using the phrase to convey how uninteresting and boring they find the movie"
+  ]
+}

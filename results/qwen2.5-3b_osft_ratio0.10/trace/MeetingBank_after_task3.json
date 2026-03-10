@@ -1,0 +1,32 @@
+{
+  "task": "MeetingBank",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_3_MeetingBank/hf_format/samples_9450.0",
+  "num_examples": 692,
+  "metrics": {
+    "bleu-1": 0.2666480932047984,
+    "bleu-4": 0.18956122366130151,
+    "rouge-L": 0.3385975729776115
+  },
+  "predictions": [
+    "Recommendation to request City Manager to work with Public Works and report back in 60 days on current outreach efforts through the Clean Long Beach Initiative and what additional efforts are being considered to further engage the community in recycling and composting.",
+    "AN ORDINANCE relating to the Department of Finance; authorizing the Director of Finance to sell certain surplus property located at 120th and 122nd Avenues and 85th and 87th Streets in the Second Northeast and Eighth Latona neighborhoods.",
+    "is a really important resolution to advance.",
+    "Application of 2203 Eastlake Avenue East LLC, to rezone land at 2203-2209 Eastlake Avenue East from Neighborhood Commercial 1-30 (NC1-30) to Neighborhood Commercial 2-NR (NC2-NR), and to demolish",
+    "to Councilor Flynn.",
+    "Request for an extension to the Conditional Approval of a petition to Swedish Health Services to vacate the alley located on the block between Columbia Street, Minor Avenue, Cherry Street and Boren Avenue, previously approved in 2016 under Clerk File 314304.",
+    "Brooks, and others.",
+    "Recommendation to receive supporting documentation into the record, conclude the public hearing and grant an Entertainment Permit with conditions on the application of Food Restaurant 1223 East Anaheim Street, for Entertainment With Dancing.  (District 6)",
+    "AN ORDINANCE relating to the Department of Parks and Recreation; authorizing the Superintendent of Parks and Recreation to sign a lease with Sprint Communications Company, LP, for continuing use of subsurface fiber optic cable installed in the Berridge Gilman Trail.",
+    "Recommendation to adopt resolution requesting that the Board of Harbor Commissioners approve the transfer of 5 percent of Fiscal Year 2018 gross operating revenue from the Harbor Revenue Fund to the Harbor Operations Fund.  (Citywide)",
+    "Recommendation to authorize City Manager, or designee, to execute a First Amendment to Agreement with Long Beach Transit, to extend the agreement for six months to provide sufficient time to optimize the Belmont Shore Employee Rider Pass Program; and, increase the contract amount by $12,000, for a revised total contract",
+    "'m sorry.",
+    "the information to the appropriate departments and departments will work with the legal department to make sure that we're not missing any other potential sources of funding.",
+    "time, I will be pushing for more concrete action to end youth detentions.",
+    "AN ORDINANCE relating to elections; prohibiting foreign influence corporations from making independent expenditures or contributing to campaigns or independent expenditure committees; amending Section 2.04.010, Section 2.04.020, Section 2.04.026, Section 2.",
+    "AN ORDINANCE relating to land use and zoning; amending the Community or Technical College District 25-00-00-00-00-00-00-00-00-00-00-00-00-00-00",
+    "ce to the request.",
+    "demolition process is going to be applied. But, I think, the intent is to expedite the demolition of vacant buildings that are not being used for their intended purpose.",
+    "from our families and our students. And we also looked at data from the County of Alameda, Department of Health and Human Services. And really, what we wanted to do was to really look at the data and also to really look at what our families and our students are telling us. And we also heard from families",
+    "that was sent out, and it's been removed, but it was a very scary picture of a drunk driver that crashed into a van and killed the driver and the passenger.  So we are very conscious of the fact that this area is very small and very tight, and we don't want to see any more drunk"
+  ]
+}

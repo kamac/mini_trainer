@@ -1,0 +1,30 @@
+{
+  "task": "FOMC",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_5_ScienceQA/hf_format/samples_15000.0",
+  "num_examples": 496,
+  "metrics": {
+    "accuracy": 0.6774193548387096
+  },
+  "predictions": [
+    "B\nThe members also agreed that the risks remained weighted mainly in the direction of greater inflation pressures and that further tightening actions might be necessary to bring about financial conditions that were sufficiently firm to contain upward pressures on labor costs and prices.\nStance:B\nThe members also agreed that the risks remained weighted mainly in the direction of",
+    "B\nThe text indicates that the monetary policy stance isB. The recent increase in inflation compensation on Treasury Inflation-Protected Securities (TIPS) indicates that the central bank is likely implementing policies to curb inflation.",
+    "A\nThe Committee will maintain its current stance of using the federal funds rate as little as possible in pursuit of its inflation-mitigating effects. The Committee will continue to use its main tool of adjusting the federal funds rate in response to changes in economic conditions, as warranted by its mandate.",
+    "C\nThe real gross domestic product (GDP) is estimated to be 100. If the central bank raises interest rates, it will be more difficult for businesses to borrow money and estimate the real GDP will fall. If the central bank lowers interest rates, it will be easier for businesses to borrow money and",
+    "C\nIn the 1998-2000 period, the behavior of crude oil prices, unemployment, and the exchange rate was not especially surprising or anomalous.\nStanceC\nIn the 2001-2003 period, the behavior of crude oil prices, unemployment,",
+    "C\nToday, the Federal Reserve's duties fall into four general areas: maintaining the stability of the financial system and containing systemic risk that may arise in financial markets supervising and regulating banking organizations to ensure the safety and soundness of the nation's banking and financial system and to protect consumers from harm in their use of credit",
+    "C\nThe text does not provide specific information about the relationship between stock prices and existing home sales that would help us determine the monetary policy stance.",
+    "C\nThe text does not provide a clear monetary policy stance.",
+    "B\nThe Committee will maintain a high degree of flexibility in its use of the available policy tools. The Committee will use these tools to help maintain price stability while supporting maximum sustainable employment in the face of a financial market downturn. The Committee will also use these tools to support financial market stability in the face of a goods and",
+    "A\nThe text indicates that a monetary policy is more likely to be of a dovish nature. The reason is that a dovish policy is typically associated with a lower interest rate. The text suggests that a lower interest rate is associated with an economy that is operating above its natural level of full employment.",
+    "C\nThe Committee will seek to preserve the current real value of the national debt by setting interest rates that reflect the real cost of borrowing. The Committee will also seek to maintain the confidence of the public in the stability and soundness of the dollar and the US financial system. The Committee will use the monetary policy rate to",
+    "C\nThe table below shows how the exchange rate and interest rate together determine the cost of borrowing in the foreign exchange market.\n | Exchange rate | Interest rate | Cost of borrowing\nA | Strong currency | High interest | High\nB | Strong currency | Low interest | Low\nC | Weak currency | High interest |",
+    "B\nThe Committee's projections are for the Committee's policy rate to be 4.25 percent at the end of next year and 2023. The Committee's projections call for the policy rate to be unchanged at 4.25 percent in 2019 and 202",
+    "C\nThe staff's initial estimate of the neutral interest rate was between 3.25% and 3.75%.\nThe staff's initial estimate of the neutral fiscal stance was a change in the general government budget balance of between -1.25% of GDP and -0.25%",
+    "B\nThe Committee's decision to maintain its current policy stance is consistent with the Committee's mandate to promote maximum sustainable employment and to maintain price stability over the medium term.\nThe Committee's current policy stance is to maintain its current target range for the federal funds rate. The Committee will continue to monitor the state of the economy",
+    "C\nSome participants suggested that the Committee's decision to maintain the federal funds rate target within a given reporting period was often based on a review of recent economic developments and a judgment as to how changes in the federal funds rate target would impact the economy in the short and longer run. In making this judgment, the Committee took",
+    "A\nThe Committee's communications refer to a number of different objectives for economic activity. The Committee uses the terms \"overheating,\" \"cooling,\" and \"satisfactory\" to refer to the state of the economy relative to its objectives. The Committee uses the term \"balanced\" to refer to the state of",
+    "C\nThe Committee decided to maintain the target range for the federal funds rate between 0 and 1 percent, and held the federal funds rate at 0 percent for the third year in a row. The Committee also decided to maintain the target range for the 10-year Treasury yield between 3 percent and",
+    "C\nThe staff's forecast for the federal funds rate was 1.5 percent for all quarters of 2015 and 2016.\nThe staff's forecast for real GDP was 1.7 percent for all quarters of 2015 and 2016.\nThe staff",
+    "C\nThe text indicates that the monetary policy should be neutral, as the inflation rate should be at 2 percent."
+  ]
+}

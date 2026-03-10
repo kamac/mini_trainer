@@ -1,0 +1,30 @@
+{
+  "task": "C-STANCE",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_4_Py150/hf_format/samples_13656.0",
+  "num_examples": 2000,
+  "metrics": {
+    "accuracy": 0.5175
+  },
+  "predictions": [
+    "A",
+    "B",
+    "C",
+    "B",
+    "C",
+    "A",
+    "A",
+    "C",
+    "B",
+    "B",
+    "A",
+    "A",
+    "B",
+    "A",
+    "B",
+    "C",
+    "A",
+    "C",
+    "C",
+    "A"
+  ]
+}

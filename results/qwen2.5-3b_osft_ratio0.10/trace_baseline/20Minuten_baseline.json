@@ -1,0 +1,32 @@
+{
+  "task": "20Minuten",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "num_examples": 200,
+  "metrics": {
+    "bleu-1": 0.1537950319977572,
+    "bleu-4": 0.02054236760691825,
+    "rouge-L": 0.15707623188941033
+  },
+  "predictions": [
+    "Griechenland fürchtet die kommende Hitzewelle. Von Dienstag an sollen die Temperaturen tagsüber bis zu 44 Grad erreichen und auch nachts nicht unter 30 Grad fallen. Der Wetterdienst und der Zivilschutz rufen bereits jetzt Alarm",
+    "Ein Video auf Tiktok zeigt, wie vier Jugendliche aus einer Gondel springen - aus mehreren Metern Höhe und bei voller Fahrt. Auch ihre Skis und Snowboards fallen aus der Kabine. Das Kurzvideo hat knapp 80'000 Aufrufe und T",
+    "Nikki Phillippi und ihr Mann sind wegen eines Videos, in dem sie ihren Hund Bowser beschreiben, kritisiert. Bowser, ein Bullterrier, hat ihren einjährigen Sohn Logan gebissen. Sie haben Bowser schon seit neun Jahren. Das Video wurde mit Wut und Able",
+    "Wie bist du zum Schauspielen gekommen, Melodie? Ich habe eigentlich Coiffeur gelernt. Aber ich wollte immer was Großes machen! Singen oder Modellieren. Aber ich war zu klein für das. Also Schauspielerin? Ja, genau. In Zürich",
+    "Die Badezimmer-Trophy von Coop läuft vom 15. September bis 7. Februar: Für 10 Franken Einkauf gibt es ein Märkli ins Sammelbuch. Kunden erhalten Rabatt auf Frotteetücher und Elektrogeräte. Die",
+    "\"Der Film 'Wer wir waren' dauert rund zwei Stunden. Marc Bauder, Autor und Regisseur, zeigt uns, wie es um unseren Planeten steht. Er zeigt uns, wie es in der Tiefsee, in Fukushima und im Weltall aussieht. Es ist ein Film, der",
+    "Max Heinzer hätte früher reagiert, wenn die Nachricht nicht untergegangen wäre. Die NHL möchte sein Video sehen, das zeigt, wie er mit einem Degen Pucks abwehrt. Er spielt Badminton und beobachtet dabei Keeper. Dann kam ihm die Idee",
+    "In den Militärkasernen werden strengste Maßnahmen gegen den Coronavirus eingeführt. Eine Impfkampagne beginnt im Juli. Alle Angehörigen der Armee, die mehr als vier Wochen Dienst geleistet haben, sollen die Impfung freiwillig bekommen. Die ersten",
+    "Erstmalig an der Tour de France dabei und gleichzeitig: Marc Hirschi gewinnt die zweite Etappe in Nizza. Er hat nur eine Radlänge vor Julian Alaphilippe. Marc Hirschi, 22 Jahre alt, fährt jetzt für das deutsche",
+    "15 Menschen wurden nach 40 Tagen in einer Höhle in Frankreich entlassen. Sie waren in der Höhle für eine wissenschaftliche Studie, in der sie ohne Sonne und Uhren verbrachten. Sie kamen aus der Höhle mit einem breiten Läch",
+    "Nina Christen macht im Final vorne mit und ist auf dem Medaillenkurs. Sie ist zwar in der schwächsten Disziplin, aber sie schafft Volltreffer. Im Liegen fällt sie etwas zurück, aber sie hat immer noch Chancen. Nina beweist ihre",
+    "Kennst du Cephas Malele? Der Stürmer spielt für den rumänischen Erstligisten FC Arges und hat in dieser Saison 18 Tore erzielt - und ist Schweizer! Im Jahr 2021 hat er zwölf Treffer erzi",
+    "Ein 32-jähriger Schweizer muss im Juni vor dem Basler Strafgericht wegen mehrerer Vergehen anteilen. Die Staatsanwaltschaft beschuldigt ihn von Betrug, Fälschung von Dokumenten, Kreditverschwendung und Veruntreuung",
+    "16 Frauen und Männer, die wegen Besetzung eines Gebäudes vor Gericht standen, bekamen keine Strafe. Sie wurden wegen Hausfriedensbruchs bedingt bestraft. Der Polizeidirektor war enttäuscht. Er meinte, dass Polizisten weniger gesch",
+    "In Mauritius, an ecological disaster is unfolding: Around 1000 tons of oil spilled from the grounded cargo ship Wakashio. People are worried about their lives: A border opening after the coronavirus lockdown was planned for September - but now the oil crisis causes further uncertainty in the tourism industry. \"The",
+    "Rapperin Cardi B (28) streitet sich auf Twitter mit dem Kindermärchenhelden Peppa Pig. Ihre Tochter Kulture (2) mag Peppa sehr und möchte immer wieder ins Wasser springen, wie Peppa es tut. Cardi ist sauer,",
+    "Ein Bordell ist der Ausgangspunkt einer neuen Netflix-Serie namens \"Sky Rojo\". In diesem Bordell arbeiten drei Frauen, die Opfer von Menschenhandel sind. Sie kämpfen gegen ihren Zuhälter und fliehen vor ihm. Die Produzenten haben mit Opfern",
+    "Seit einem Monat ist Alishia Bucher, 21 Jahre alt, aus Adligenswil verschwunden. Ihre Familie hat Flyers verteilt, um sie zu finden. Eine Freundin und die \"Bahnhofs-Mami\" Margot Grüter haben auch geholfen. Sie haben in ganz",
+    "Roger Federer versucht gerade, wieder zu spielen. Er hat sich schon lange nicht mehr öffentlich geäußert. Sein rechtes Knie hatte Probleme, seit einiger Zeit. Sein Coach spricht nicht darüber. Federer hat bei den SRF-Sport-Awards klare Auss",
+    "Am 4. August 2018 fiel in Graubünden eine Ju-52-Jacht von der Dübendorfer Ju-Air ab. 20 Menschen starben. Die Schweizer Sicherheitsuntersuchungsstelle hat den Bericht zum Unfall veröffentlicht. Sie sagen"
+  ]
+}

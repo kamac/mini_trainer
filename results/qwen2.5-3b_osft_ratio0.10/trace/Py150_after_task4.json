@@ -1,0 +1,30 @@
+{
+  "task": "Py150",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_4_Py150/hf_format/samples_13656.0",
+  "num_examples": 2000,
+  "metrics": {
+    "similarity": 55.463
+  },
+  "predictions": [
+    "return isinstance ( value , str ) or ( hasattr ( value , '<STR_LIT:__unicode__>' ) and not PYTHON3 )",
+    "import hashlib",
+    "ze_counter ,",
+    "'<STR_LIT>' ,",
+    ":3> , <NUM_LIT:4> ] ,",
+    "self . failUnless ( n . isInstanceOf ( Gaffer . Scene . staticTypeId ( ) ) )",
+    "names ( self , fileish ) :",
+    ") :",
+    "from kitsune . postcrash . models import Signature",
+    "[ x - nmean + <NUM_LIT:1> for x in ntimes ] / nstd + <NUM_LIT:1>",
+    "data_dict [ field ] = value . __dict__",
+    "try :",
+    "if filename . endswith ( '<STR_LIT:gz>' ) :",
+    "def __init__ ( self , cmd , response_status = None ) :",
+    "else :",
+    "data [ '<STR_LIT>' ] = iteration_coordinate",
+    "PREMIUM_RATE_ID = '<STR_LIT>'",
+    "import_module ( '<STR_LIT>' . format ( app_path , module_name ) )",
+    "self . xmpp . new_message = self . new_message_handler",
+    "def test_create_file ( self ) :"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "task": "MeetingBank",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_5_ScienceQA/hf_format/samples_15000.0",
+  "num_examples": 692,
+  "metrics": {
+    "bleu-1": 0.2762482257077855,
+    "bleu-4": 0.1887590011664839,
+    "rouge-L": 0.34543336923529316
+  },
+  "predictions": [
+    "Recommendation to the City Manager to work with Public Works and report back in 60 days on current outreach efforts through the Clean Long Beach Initiative, including the use of locked trash and recycling bins with decals.",
+    "AN ORDINANCE relating to the Department of Finance; authorizing the sale of certain real property surplus to the City’s needs.",
+    "is a really important bill. I think that it's something that the state Legislature ought to do. I think that the Governor ought to do this. I think that this is something that the City of Seattle ought to do. So I'm glad that we're taking a step in the right direction.",
+    "Application of 2203 East Lake Avenue East LLC, to rezone land at 22 or 3 East Lake Avenue East from Neighborhood Commercial 1 (M) to Neighborhood Commercial 2 (M2) and Lowrise (L) to Neighborhood Commercial 40 (M40), and to",
+    "to Councilor Flynn. Councilor Flynn in the order of business.",
+    "Summary:AN ORDINANCE relating to the vacation of an alley; vacating the alley located on the block between Columbia Street, Minor Avenue, Cherry Street, and Boren Avenue, in the block of record number 95/32, in the City of Seattle; and accepting a petition for the vacation.",
+    "Hayes, and others.",
+    "Recommendation to receive supporting documentation into the record, conclude the public hearing and grant an Entertainment Permit with conditions on the application of Food Restaurant, LLC, dba Udon Restaurant, 1223 East Anaheim Street, for Entertainment With Dancing.  (District 6)",
+    "AN ORDINANCE relating to the Department of Parks and Recreation; authorizing the Superintendent of Parks and Recreation to sign a lease with Sprint Communications Company, LP., for continuing use of subsurface fiber optic cable installed in the Bert Gilman Trail.",
+    "Recommendation to adopt resolution requesting that the Board of Harbor Commissioners approve the transfer of 5 percent of Fiscal Year 2018 gross operating revenue from the Harbor Revenue Fund to the Thailand Operation Fund.",
+    "Recommendation to authorize City Manager, or designee, to execute a First Amendment to Agreement No. 33881 with Long Beach Transit, to extend the agreement for six months, to provide sufficient time to optimize the Belmont Shore Employee Rider Pass Program; and\n\nIncrease appropriations in the General Fund (GF)",
+    "'m sorry. So, Councilmember Richardson, if you have any questions for me, I'd be happy to answer them.",
+    "all of that information to you and we'll do that in a thorough and timely manner.",
+    "time, calling on the city to do more to end youth detention. The bill before the council today is a good first step, but we need to do more. Councilmember O'Brien, if you can get to your feet, I'd be happy to hear your thoughts on this resolution.",
+    "AN ORDINANCE relating to elections; prohibiting foreign influence corporations from making independent expenditures or contributing to campaigns or independent expenditure committees; amending Section 2.04.010 of the Seattle Municipal Code and adding a new section 2.04.400 to the Seattle Municipal Code.",
+    "AN ORDINANCE relating to land use and zoning; defining the addition of a single development that includes residential uses at a community or technical college located within an urban center; amending Sections 25.02.010, 25.02.030, 25.0",
+    "ce to the request. But I think the committee should be allowed to meet in executive session. I'd like to do that. I'd like to meet in executive session. I'd like to meet in executive session.",
+    "demolition process is calculated. But I think that this bill does a better job of establishing some of the policy and the regulatory objectives that are important to respond to the public safety concerns that we've heard from a number of community members.",
+    "from our students and our staff. So we collected all this information and then we brought it back to our district leadership and our data team. And we started to look for ways to make sense of all this information. So we started to look for ways to make sense of all this information. So we started to look for",
+    ". So it's been going on for a while. So I'm glad that this is being looked at. Thank you."
+  ]
+}

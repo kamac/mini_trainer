@@ -1,0 +1,30 @@
+{
+  "task": "NumGLUE-cm",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_6_NumGLUE-cm/hf_format/samples_15000.0",
+  "num_examples": 81,
+  "metrics": {
+    "accuracy": 0.6790123456790124
+  },
+  "predictions": [
+    "4",
+    "854",
+    "18",
+    "40",
+    "10",
+    "10",
+    "48",
+    "52",
+    "26",
+    "22",
+    "30",
+    "8",
+    "10",
+    "24",
+    "9.379",
+    "12",
+    "147",
+    "7",
+    "10",
+    "14110"
+  ]
+}

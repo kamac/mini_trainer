@@ -1,0 +1,30 @@
+{
+  "task": "NumGLUE-ds",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "num_examples": 325,
+  "metrics": {
+    "accuracy": 0.012307692307692308
+  },
+  "predictions": [
+    "To find the mass percentage of hydrogen (H) in citric acid, we need to follow these steps:\n\n1. Determine the molar mass of citric acid (C6H8O7).\n2. Calculate the total mass contributed by hydrogen atoms in one molecule of citric acid.\n3. Divide the mass",
+    "To find the mass percentage of nitrogen (N) in ammonium chloride (NH4Cl), we need to follow these steps:\n\n1. Determine the molar mass of NH4Cl.\n2. Determine the molar mass of nitrogen (N) in NH4Cl.\n3. Calculate the mass percentage of nitrogen.",
+    "To find the mass percentage of bromine (Br) in ammonium bromide (NH4Br), we need to follow these steps:\n\n1. Determine the molar mass of NH4Br.\n2. Determine the molar mass of bromine (Br).\n3. Calculate the mass percentage of bromine in NH",
+    "To find the mass percentage of hydrogen (H) in butanoic acid, we need to follow these steps:\n\n1. Determine the molecular formula of butanoic acid.\n2. Calculate the molar mass of butanoic acid.\n3. Calculate the total mass contributed by hydrogen atoms in one molecule of butano",
+    "Step 1: Write the balanced chemical equation for the reaction between NaHCO3 and HCl.\nThe balanced chemical equation is: NaHCO3 + HCl → NaCl + H2O + CO2\n\nStep 2: Identify the stoichiometric ratio from the balanced chemical equation.\nFrom the",
+    "To calculate the speed, we use the formula:\n\nspeed = distance / time\n\nGiven that the distance is 70 meters and the time is 10 seconds, we can substitute these values into the formula:\n\nspeed = 70 meters / 10 seconds\nspeed = 7 meters/second",
+    "To solve this problem, we need to calculate the molecular weight of the given compound. The molecular weight is determined by adding up the atomic weights of all the atoms in the molecule.\n\nHere are the steps:\n\n1. Identify the elements and their respective quantities in the compound:\n   - Hydrogen (H): 3 atoms",
+    "To find the mass percentage of nitrogen (N) in ammonium bromide (NH4Br), we need to follow these steps:\n\n1. Determine the molar mass of NH4Br.\n2. Determine the molar mass of nitrogen (N) in NH4Br.\n3. Calculate the mass percentage of nitrogen",
+    "To solve this question, we first need to write a balanced chemical equation for the reaction between ethane (C2H6) and chlorine (Cl2) to form chloroethane (C2H5Cl) and hydrogen chloride (HCl).\n\nStep 1: Write the unbalanced chemical equation",
+    "To solve this question, we need to first write a balanced chemical equation for the reaction between sodium hydroxide (NaOH) and sulfuric acid (H2SO4). \n\nThe balanced chemical equation is:\n\n\\[ 2NaOH + H_2SO_4 → Na_2SO_4 +",
+    "To determine the molecular weight of a compound with 2 nitrogen (N) atoms and 1 oxygen (O) atom, we need to know the atomic weights of these elements. The atomic weights are approximately:\n\n- Nitrogen (N): 14.01 g/mol\n- Oxygen (O):",
+    "To solve this problem, we need to calculate the molecular weight of the compound with one barium (Ba) atom and two bromine (Br) atoms. We will use the atomic weights of barium and bromine from the periodic table.\n\n1. Barium (Ba):\n   - Atomic number: 56",
+    "To solve this problem, we need to follow these steps:\n\n1. Find the molar mass of barium hydroxide (Ba(OH)₂).\n2. Multiply the molar mass by the number of moles.\n\nStep 1: Calculate the molar mass of Ba(OH)₂\n\n- Bar",
+    "Step 1: Write the balanced chemical equation for the reaction between ammonia and nitric acid to form ammonium nitrate.\nThe balanced chemical equation is: NH3 + HNO3 → NH4NO3\n\nStep 2: Identify the mole ratio from the balanced chemical equation.\nFrom the balanced equation, we",
+    "To solve this problem, we need to follow these steps:\n\n1. Determine the molecular formula of ammonia.\n2. Find the molar mass of ammonia.\n3. Calculate the total molecular weight for 5 moles.\n\nStep 1: The molecular formula of ammonia is NH₃ (Nitrogen trihydride",
+    "To solve this problem, we need to know the molar mass of bromic acid (HBrO3). The molar mass is calculated by adding up the atomic masses of all the atoms in one molecule of the compound.\n\n1. Hydrogen (H): 1.01 g/mol\n2. Brom",
+    "To solve this, we need to know the molar mass of calcium hydroxide (Ca(OH)2). The molar mass is calculated by adding up the atomic masses of all the atoms in the compound.\n\n1. Calcium (Ca): 40.08 g/mol\n2. Oxygen (O",
+    "To find the mass percentage of hydrogen (H) in a compound, we need to follow these steps:\n\n1. Calculate the molar mass of the compound.\n2. Calculate the total mass contributed by the hydrogen atoms.\n3. Divide the mass of hydrogen by the molar mass of the compound and multiply by 1",
+    "To find the mass percentage of fluorine (F) in aluminum fluoride (AlF3), we need to follow these steps:\n\n1. Determine the molar masses of aluminum (Al) and fluorine (F).\n2. Calculate the molar mass of aluminum fluoride (AlF3).\n3. Calculate the mass",
+    "To find the mass percentage of oxygen (O) in citric acid, we need to follow these steps:\n\n1. Determine the molar mass of citric acid (C6H8O7).\n2. Find the total mass contributed by oxygen atoms in one molecule of citric acid.\n3. Calculate the mass"
+  ]
+}

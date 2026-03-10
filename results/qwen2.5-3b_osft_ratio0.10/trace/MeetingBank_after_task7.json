@@ -1,0 +1,32 @@
+{
+  "task": "MeetingBank",
+  "model": "/tmp/checkpoints/trace_osft_qwen25/task_7_NumGLUE-ds/hf_format/samples_15000.0",
+  "num_examples": 692,
+  "metrics": {
+    "bleu-1": 0.25227471133871826,
+    "bleu-4": 0.17397105882772285,
+    "rouge-L": 0.3355100788847626
+  },
+  "predictions": [
+    "Recommendation to the City Manager to work with Public Works and report back in 60 days on current outreach efforts through the Clean Long Beach Initiative.",
+    "AN ORDINANCE relating to the Department of Finance; authorizing the sale of four parcels of real property located at 1000 2nd Avenue and 1008 2nd Avenue in the Second Northeast and 85th Latona neighborhoods.",
+    "resolution is a step in the right direction.",
+    "Application of 2203 East Lake Avenue East LLC, to rezone land at 2203 East Lake Avenue East from Neighborhood Commercial 1 P 30 to Neighborhood Commercial 2 P 40, and Neighborhood Commercial 4 P 30 to Neighborhood Commercial 4 P 40",
+    "to this petition.",
+    "Request for an extension to the conditional approval of a petition to Swedish Health Services to vacate the alley located on the block between Columbia Street, Minor Avenue, Cherry Street and Boren Avenue.",
+    "Rea, and Ralph Dougherty.",
+    "Recommendation to receive supporting documentation into the record, conclude the public hearing and grant an Entertainment Permit with conditions on the application of Food Restaurant 1223 East Anaheim Street for Entertainment with Dancing.",
+    "AN ORDINANCE relating to the Department of Parks and Recreation; authorizing the Superintendent of Parks and Recreation to sign a lease with Sprint Communications Company LP for continuing use of subsurface fiber optic cable installed in the Bert Gilman Trail.",
+    "Recommendation to adopt resolution approving the transfer of 5 percent of the gross operating revenue from the Harbor Revenue Fund to the Thailand Operation Fund.",
+    "Recommendation to authorize City Manager, or designee, to execute a First Amendment to Agreement No. 30801 with Long Beach Transit, to extend the agreement for six months to provide sufficient time to optimize the Belmont Shore Employee Rider Pass Program.",
+    "'m glad you brought it up. I think it's important.",
+    "that information to you.",
+    "time I will be pushing for the city to take concrete steps to end youth detentions.",
+    "AN ORDINANCE relating to elections; prohibiting foreign influence corporations from making independent expenditures or contributing to campaigns or independent expenditure committees; amending Section 2.04.0.10 of the Seattle Municipal Code and adding a new Section 2.04.400 to the Seattle Municipal Code.",
+    "AN ORDINANCE relating to land use and zoning; defining the addition of a single development that includes residential uses at a community or technical college located within an urban center.",
+    "ce to the request.",
+    "demolition process will be expedited. But I think that the bill does a good job of striking that balance.",
+    "from our surveys. So we looked at a lot of different places to get a wide variety of perspectives on what our students' mental health needs are. And then we also looked at some of the resources that are available in the community. So we looked at the resources that are available in our schools and in the community.",
+    "that was sent out. And it's a new one. So it's not clear to us what the parameters are. So we're calling this in to try to get some clarity on what the parameters are and what the conditions are that are being asked for."
+  ]
+}
