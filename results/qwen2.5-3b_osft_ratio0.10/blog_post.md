@@ -144,7 +144,7 @@ Each row is a task; each column is a point in time (right after training on that
 
 A few things worth highlighting:
 
-**C-STANCE holds up across all 8 tasks.** It starts at 52.1% after task 1 and ends at 53.1% after task 8 — seven more training stages, essentially zero forgetting. This is OSFT doing its job: subsequent updates can't touch what's encoded in the high-energy subspace.
+**C-STANCE holds up across all 8 tasks.** It starts at 52.1% after task 1 and ends at 53.1% after task 8 — seven more training stages, essentially zero forgetting. All tasks are trained in the same low-rank subspace, but later tasks appear to settle into different directions within it rather than overwriting what C-STANCE encoded.
 
 **FOMC actually improves over time.** It scores 67.7% right after task 2 training, and drifts up to 70.4% by task 8. This is unexpected — later tasks seem to *refine* the FOMC representation rather than overwrite it.
 
