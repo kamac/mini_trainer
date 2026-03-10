@@ -52,7 +52,7 @@ One thing worth flagging: spectral mass is measuring singular value *magnitudes*
 
 ## The SVD-truncated baseline
 
-Before fine-tuning anything, I created a sanity-check baseline: a version of Qwen2.5-3B where I *zeroed out* the bottom 10% of each weight matrix's singular components. No training — just ablation. If those components are noise, performance should be roughly unchanged.
+Before fine-tuning anything, I created a sanity-check baseline: a version of Qwen2.5-3B where I *zeroed out* the bottom 10% of each weight matrix's singular components. If those components are noise, performance should be roughly unchanged.
 
 | Model | MMLU (5-shot) |
 |-------|--------------|
