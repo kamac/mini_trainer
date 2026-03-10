@@ -1,0 +1,30 @@
+{
+  "task": "Py150",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "num_examples": 2000,
+  "metrics": {
+    "similarity": 21.4365
+  },
+  "predictions": [
+    "return isinstance ( value , str ) <EOL> def url_quote ( value ) : <EOL> if not is_string ( value ) : <EOL> raise TypeError ( \"value must be a string\" ) <EOL> if PYTHON3 : <EOL> return quote ( value , safe =",
+    "import hashlib <EOL> import time <EOL> import json <EOL> import os <EOL> import random <EOL> import string <EOL> import urllib2 <EOL> import urllib <EOL> import base64 <EOL> import socket <EOL> import",
+    "ze_counter , <EOL> on_thaw = increment_argument_happy_thaw_counter , <EOL> ) <EOL> b = C ( ) <EOL> assert b . argument_happy_freezer . frozen == <NUM_LIT:0> <EOL> assert b . argument_h",
+    "'<STR_LIT>' , <EOL> '<STR_LIT>' , <EOL> '<STR_LIT>' , <EOL> '<STR_LIT>' , <EOL> '<STR_LIT>' , <EOL> '<STR_LIT>' , <EOL> '<STR_LIT",
+    ":3> , <NUM_LIT:4> ] , <EOL> [ <NUM_LIT:3> , <NUM_LIT:4> , <NUM_LIT:5> ] , <EOL> [ <NUM_LIT:4> , <NUM_LIT:5> ,",
+    "self . failUnless ( n . isInstanceOf ( Gaffer.Node . staticTypeId ( ) ) ) <EOL> def testProcess ( self ) : <EOL> s = GafferScene . SceneTest . validSceneNode ( ) <EOL> t = GafferScene . SceneTimeWarp (",
+    "names ( self , fileish ) : <EOL> if isinstance ( fileish , str ) : <EOL> ext = splitext ( fileish ) [ 1 ] <EOL> if ext : <EOL> ext = ext [ 1 : ] <EOL> if ext in self",
+    ") : <EOL> self . _handle . status_code = value <EOL> @ property <EOL> def content_type ( self ) : <EOL> return self . _handle . mimetype <EOL> @ content_type . setter <EOL> def content_type ( self , value )",
+    "from django . template import RequestContext <EOL> from django . views . generic import ListView , DetailView <EOL> from django . forms . models import inlineformset_factory <EOL> from django . forms . widgets import SelectDateWidget <EOL> from django . forms . widgets import DateInput <",
+    "ntimes , nmean , nstd <EOL> def read_data ( self , colnames , nrows ) : <EOL> self . print_mtime ( time ( ) , \"start reading\" ) <EOL> self . print_qtime ( \"cold cache\" , [ 0 ] * READ_TIMES",
+    "data_dict [ field ] = cls . serialize_value ( value ) <EOL> return data_dict <EOL> @ classmethod <EOL> def deserialize ( cls , data_dict ) : <EOL> instance = cls . __new__ ( cls ) <EOL> for field in cls . fields",
+    "try : <EOL> response = subprocess . check_output ( [ \"curl\" , \"-s\" , \"https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=twitterapi&count=1\" ] ) <EOL> except subprocess . CalledProcessError as e : <",
+    "if filename.endswith( '.gz' ) : <EOL> return gzip.open( filename , mode , encoding = encoding ) <EOL> elif filename.endswith( '.tar.gz' ) or filename.endswith( '.tgz' ) : <EOL> return tarfile.open( filename , mode , encoding = encoding",
+    "def __init__ ( self , cmd : int ) : <EOL> self . cmd = cmd <EOL> def __repr__ ( self ) : <EOL> return f'YHSM_Cmd(cmd={self . cmd}, response_status={self . response_status}, executed={self . executed})",
+    "else : <EOL> self . encoder = codecs . utf_16_be_encode <EOL> return result <EOL> return self . encoder ( input , errors ) <EOL> class StreamReader ( codecs . StreamReader ) : <EOL> def __init__ ( self , stream , errors =",
+    "data [ '<STR_LIT>' ] = timestamp <EOL> data [ '<STR_LIT>' ] = iteration_coordinate <EOL> data [ '<STR_LIT>' ] = dict ( params ) <EOL> data [ '<STR_LIT>' ] = dict ( unknowns ) <EOL>",
+    "client = dfp.Client.LoadFromStorage() <EOL> campaign_id = 'INSERT_CAMPAIGN_ID_HERE' <EOL> campaign_service = client.GetService('CampaignService', version='v201605') <EOL> campaign = { <EOL> 'id': long(campaign",
+    "mod = import_module ( '{0}. {1}'.format ( app , module_name ) ) <EOL> except ImportError as e : <EOL> raise ImproperlyConfigured ( 'Error importing module {0}.{1}: \"{2}\"'.format ( app , module_name , e ) ) <E",
+    "self . pool_status = {} <EOL> self . pool_status_lock = threading . Lock ( ) <EOL> self . pool_status_lock = threading . Lock ( ) <EOL> self . pool_status_lock = threading . Lock ( ) <EOL> self . pool_status_lock = threading . Lock",
+    "wb = Workbook ( ) <EOL> self . got_wb = wb <EOL> self . exp_wb = wb <EOL> self . got_ws = wb . active <EOL> self . exp_ws = wb . active <EOL> self . got_sheet_name = self . got"
+  ]
+}

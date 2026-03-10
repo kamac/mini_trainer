@@ -1,0 +1,30 @@
+{
+  "task": "NumGLUE-cm",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "num_examples": 81,
+  "metrics": {
+    "accuracy": 0.04938271604938271
+  },
+  "predictions": [
+    "Step 1: Understand the problem.\nThe problem states that Piper brought 2 friends to the store where shoes of new and attractive designs are available for free. We need to find out how many pairs of shoes were there.\n\nStep 2: Calculate the total number of people.\nPiper + 2 friends =",
+    "To solve this problem, we need to determine how far Jaxson ran compared to Samantha.\nStep 1: Convert the distance Samantha ran into meters.\nSince the race is 1 kilometer long, we can convert it to meters by multiplying by 1000.\n1 kilometer * 10",
+    "Step 1: Identify the key information given in the problem.\n- Kinsley's age is 2 more than twice the number of directions illustrated on a world map.\n- There are 4 cardinal directions (North, South, East, West) on a world map.\n\nStep 2: Calculate the total",
+    "Step 1: First, we need to calculate the total number of days Leo worked on the project. Since there are 7 days in a week and Leo worked for 5 weeks, we can multiply these two numbers together to find the total number of days. Total days = 7 * 5 =",
+    "Option A: 10\nOption B: 12\nOption C: 14\nOption D: 16\nStep 1: Identify the vowels in the English alphabet. The vowels are A, E, I, O, and U.\nStep 2: Determine how many times each",
+    "Step 1: Determine the starting time and ending time of the journey.\nStarting time: 10 pm\nEnding time: 8 am\n\nStep 2: Convert the ending time to a 24-hour format if necessary.\nEnding time: 8 am = 8:00 hours\n\nStep",
+    "Step 1: Determine the monthly savings amount.\nChristopher saves $4k per month.\n\nStep 2: Determine the number of months in a year.\nThere are 12 months in a year.\n\nStep 3: Calculate the total savings by multiplying the monthly savings amount by the number of months in a year",
+    "Step 1: Understand that a pair of shoes consists of two individual shoes, so we need to multiply the number of pairs by 2 to find the total number of individual shoes.\nTotal number of individual shoes = 26 pairs * 2 = 52 individual shoes.\n\nStep 2: Since each",
+    "To solve this problem, we need to determine the total number of gifts required for the event where each team has both a captain and a vice-captain.\n\nStep 1: Identify the number of teams\nThere are 13 teams participating in the world cup.\n\nStep 2: Determine the number of gifts",
+    "Step 1: Understand the context of the question.\nThe question is about a group of boys who are playing poker and have kept some cards aside.\n\nStep 2: Identify the key information provided in the question.\n- The group of boys played poker.\n- They kept 8 cards aside.\n\nStep 3:",
+    "30\nExplanation: Half an hour is equivalent to 30 minutes. Therefore, Ariana sleeps for 30 minutes. The answer is 30. To solve this problem, we need to understand the relationship between hours and minutes. We know that one hour is equal to 60 minutes.",
+    "Step 1: Identify the start and end times of Lydia's sleep.\nLydia goes to sleep at 9 PM and wakes up at 7 AM.\n\nStep 2: Convert the start and end times into a 24-hour format for easier calculation.\nStart time: 9 PM = 21",
+    "Option A\nStep 1: Identify the vowels in the English alphabet. The vowels are A, E, I, O, and U.\n\nStep 2: Determine how many times each vowel was written. According to the problem, each vowel was written 2 times.\n\nStep 3: Calculate the total number",
+    "To solve this problem, we need to determine how many different colors are needed for Victoria and her two friends to color each of the seven planets in the solar system with a unique color.\n\n1) First, let's understand that there are 7 planets in the solar system.\n2) Each person needs to color a",
+    "To solve this problem, we need to convert Cooper's speed from meters per second (m/s) to kilometers per hour (km/h), and then use that speed to find out how far he can run in 39 seconds.\n\nStep 1: Convert Cooper's speed from m/s to km/h\n1 meter",
+    "Step 1: Understand the problem.\nThe question states that all players in a local soccer club use one washing machine to wash their socks immediately after the match. We are given that there are 24 socks in the washing machine.\n\nStep 2: Identify the key information.\n- Number of socks in the washing",
+    "To solve this problem, we need to calculate the total number of days in 3 weeks and then multiply that by the number of apples Addison needs to eat each day.\n\nStep 1: Calculate the total number of days in 3 weeks\nThere are 7 days in a week, so:\n3 weeks *",
+    "13 hours\nExplanation:\nKennedy reached his office at 2 o'clock in the morning, which is equivalent to 2:00 AM. He left his office at 9 PM.\nTo calculate the total time he spent in the office, we need to subtract the start time from the end time.",
+    "Step 1: Determine the starting time and ending time of the journey.\nStarting time: 10 pm\nEnding time: 7 am\n\nStep 2: Convert the ending time to a 24-hour format if necessary.\nEnding time: 7 am = 7:00 pm (in",
+    "To find Cameron's annual income last year, we need to calculate how much he would have earned if he had worked all 12 months.\n\nStep 1: Determine the number of months Cameron worked.\nCameron took an unpaid leave for 3 months, so he worked for 12 - 3 ="
+  ]
+}
