@@ -169,7 +169,7 @@ I tracked spectral mass at each checkpoint to see how much energy accumulated in
 | after task 4 (Py150) | 1.72% | 4.43% | 8.09% |
 | after task 8 (20Minuten) | 1.75% | 4.48% | 8.14% |
 
-It barely moves — and I think that's actually the right read. Spectral mass is tracking how much energy we're adding to the low-rank subspace, which corresponds to how much new knowledge we're encoding in it. The answer is: not much. OSFT makes small, targeted updates by design, and 8 sequential fine-tuning tasks don't radically alter the weight matrices — they nudge them. The 1.69% → 1.75% shift over the full experiment is consistent with that picture.
+It barely moves — and I think that's actually the right read. Spectral mass is tracking how much energy we're adding to the low-rank subspace, which corresponds to how much new knowledge we're encoding in it. The answer is: not much. OSFT makes small, targeted updates by design, and 8 sequential fine-tuning tasks don't radically alter the weight matrices. The 1.69% → 1.75% shift over the full experiment is consistent with that picture.
 
 What the metric *can't* tell you is where within that subspace the learning happened — spectral mass is blind to which directions the singular vectors rotated into. But as a coarse indicator of "how much did we disturb the low-rank subspace", it's doing its job.
 
