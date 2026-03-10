@@ -73,9 +73,26 @@ I tracked MMLU (5-shot, 57 subtasks) after each OSFT training stage:
 
 A few things stand out:
 
-**FOMC causes a significant trough.** FOMC is a Fed monetary policy classification task where the labels are single characters: A, B, or C. After training on it, MMLU drops from 58.6% to 49.2% — a −9.4pp hit. My read is that FOMC's narrow label distribution temporarily collapses the model's output diversity. [Nait Saada, Naderi & Tanner (2024)](https://arxiv.org/abs/2410.07799) describe a related phenomenon in attention layers they call **rank collapse**, where a spectral gap between the largest singular values causes tokens to converge toward identical representations. Training on single-character classification outputs seems to induce something analogous here — the model's output space gets pushed into a low-rank regime that degrades multi-class reasoning across MMLU.
+**FOMC causes a significant trough.** FOMC is a Fed monetary policy classification task where the labels are single characters: A, B, or C. After training on it, MMLU drops from 58.6% to 49.2% — a −9.4pp hit.
 
-Breaking the damage down by MMLU category makes it stranger:
+I initially attributed this to something like output rank collapse ([Nait Saada et al., 2024](https://arxiv.org/abs/2410.07799)) — the model's output diversity collapsing under the pressure of narrow labels. But after re-training the FOMC checkpoint and running inference on a 200-question MMLU sample, the actual mechanism turns out to be much more mundane:
+
+<center><img src="visualizations/fomc_label_artifact.png" alt="FOMC label distribution artifact" width="720" /></center>
+
+**FOMC is a 3-class task. MMLU is 4-class. The model simply stops predicting D.**
+
+The FOMC training set contains A, B, and C labels only — D never appears. After fine-tuning, the model assigns near-zero probability to D (0.5% of predictions vs D being the correct answer 26.9% of the time). On questions where the correct answer is D:
+
+| | D-questions accuracy | C-questions accuracy | Overall |
+|--|--|--|--|
+| Base model | 84.6% | 58.1% | 61.0% |
+| After FOMC | **1.9%** | **81.4%** | **44.0%** |
+
+The −17pp overall drop is almost entirely explained by this: the model fails D-questions catastrophically (−82.7pp) while actually *improving* on C-questions (+23.3pp), because C is over-represented in the FOMC training distribution (48.9% of labels vs 25.5% in MMLU).
+
+This also explains the uniform category recovery. Nothing domain-specific was damaged — the model just needed to see D as a valid output label again, which happens naturally during MeetingBank (open-ended generation) and the subsequent tasks.
+
+Breaking the damage down by MMLU category and subtask confirms there's no domain fingerprint:
 
 <center><img src="visualizations/mmlu_category_fomc.png" alt="MMLU category breakdown: original vs after FOMC vs after task 8" width="700" /></center>
 
@@ -86,23 +103,13 @@ Breaking the damage down by MMLU category makes it stranger:
 | STEM | −16.0pp | +10.2pp (64%) | −5.8pp |
 | Other | −14.6pp | +9.0pp (62%) | −5.6pp |
 
-Two things stand out. First, **Social Sciences takes the biggest hit** (−22pp vs ~−16pp for everything else), even though FOMC *is* a social science task. You'd expect domain-adjacent knowledge to be preserved — instead it's the most disrupted. The single-letter label format seems to specifically damage the representation space where policy and economics reasoning lives.
-
-Second, **recovery is eerily uniform across all four categories (~61–67%)**. Subsequent tasks — code completion, science QA, numerical reasoning — restore roughly two-thirds of the FOMC-induced damage regardless of domain. Whatever the repair mechanism is, it's not category-specific.
-
-Drilling down to all 57 individual subtasks reveals a sharper picture:
+Social Sciences takes the biggest hit only because it had the highest baseline accuracy — and the per-subtask scatter confirms this:
 
 <center><img src="visualizations/fomc_subtask_drops.png" alt="Per-subtask FOMC drop sorted by severity" width="780" /></center>
 
-The drops are far from uniform — ranging from −3pp (college mathematics) to −33pp (security studies). And the pattern across all 57 subtasks turns out to correlate with the model's *baseline score*:
-
 <center><img src="visualizations/fomc_baseline_vs_drop.png" alt="Baseline accuracy vs FOMC drop per subtask" width="640" /></center>
 
-The trend (r = −0.40): **every 10pp of baseline score predicts ~2pp of extra FOMC-induced drop**. Subjects where the model was already strong fall furthest; subjects where it was already weak are relatively unaffected.
-
-College mathematics is the clearest example — the model scored just 35% before fine-tuning and dropped only 3pp after FOMC. High school world history scored 87% and dropped 32pp. That's a 29pp gap in vulnerability between two subjects in the same MMLU category.
-
-One interpretation: subjects where the model was already confident relied on a rich, well-differentiated output distribution to discriminate between similar answer choices. FOMC's collapsed A/B/C label space disrupts exactly that. Subjects where the model was already near-chance had no such fine-grained distribution to destroy.
+The trend (r = −0.40) — stronger subtasks drop more — is explained by the same artifact: high-accuracy subjects had a higher proportion of correct D answers that the model was getting right. After FOMC, it gets all of them wrong. Low-accuracy subjects had weak D performance to begin with, so there's less to lose.
 
 **The model recovers.** By task 5 (ScienceQA), MMLU climbs back to 60.3%. By the end of task 8, it sits at 60.2% — still −6.3pp below the original 66.5%, but the recovery from the FOMC trough is real and meaningful.
 
@@ -176,11 +183,11 @@ What the metric *can't* tell you is where within that subspace the learning happ
 **Didn't work as well:**
 - MMLU never fully recovers to the original 66.5% — whether that's fundamental to OSFT or a training budget issue, I don't know
 - 20Minuten only improved by +2.6pp ROUGE-L, despite being the last task with no forgetting pressure
-- The spectral mass metric turned out to be the wrong thing to track
+- Watch out for tasks whose label space is a strict subset of your evaluation benchmark — the FOMC/MMLU issue (A/B/C training vs A/B/C/D eval) caused a mechanical 17pp MMLU drop entirely unrelated to knowledge loss
 
 **Open questions:**
 - The SVD-truncated model dropping 42.5pp despite holding only 1.69% of spectral mass suggests these components encode more than their energy would imply. What exactly? The overlap with activation covariance eigenvectors [Staats et al.](https://arxiv.org/abs/2410.17770) identified is a strong lead.
-- FOMC's recovery over subsequent tasks — is this a property of OSFT specifically, or does it happen with regular fine-tuning too?
+- FOMC's recovery was driven by re-exposure to D-labeled outputs in later tasks. But the model still ends up −6.3pp below baseline on MMLU overall — is that residual gap also label-distribution related, or genuine capability loss?
 
 ## Setup
 
